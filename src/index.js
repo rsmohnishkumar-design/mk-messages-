@@ -3,7 +3,7 @@
 // First registered user = Admin. Only the admin creates groups (6-digit number).
 // Anyone with the number can join and chat.
 
-const ORIGINS = ['https://rsmohnishkumar-design.github.io'];
+const ORIGINS = ['https://rsmohnishkumar-design.github.io', 'https://mk-messages.pages.dev'];
 
 export default {
   async fetch(request, env) {
