@@ -1,0 +1,9 @@
+{
+  "name": "mk-messages",
+  "main": "src/index.js",
+  "compatibility_date": "2025-01-01",
+  "durable_objects": { "bindings": [{ "name": "HUB", "class_name": "Hub" }] },
+  "migrations": [{ "tag": "v1", "new_classes": ["Hub"] }]
+  // After enabling R2 and creating the bucket, uncomment:
+  // "r2_buckets": [{ "binding": "UPLOADS", "bucket_name": "mk-messages-uploads" }]
+}
