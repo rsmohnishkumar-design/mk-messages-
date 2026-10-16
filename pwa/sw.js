@@ -1,6 +1,6 @@
 // MK Messages service worker: caches the app shell, and shows call / message /
 // invitation alerts from Web Push so calls ring even when the app is closed.
-const CACHE = 'mk-shell-v4';
+const CACHE = 'mk-shell-v5';
 const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

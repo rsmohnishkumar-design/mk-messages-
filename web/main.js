@@ -8,4 +8,4 @@ if('serviceWorker' in navigator){
  });
 }
 {const q=new URLSearchParams(location.search);if(q.get('join')&&!token)store.set('mk_join',q.get('join'))}
-if(token)start();
+if(token){cacheLoad();showLock();start()}

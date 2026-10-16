@@ -94,14 +94,39 @@ function arPlaceModal(){
   });
  }});
 }
+function drawRadar(cv){
+ if(!cv||!ar)return;
+ const W=cv.width,c=W/2,g=cv.getContext('2d'),cs=getComputedStyle(document.documentElement),sub=cs.getPropertyValue('--sub').trim(),line=cs.getPropertyValue('--line').trim(),txt=cs.getPropertyValue('--text').trim();
+ g.clearRect(0,0,W,W);g.font='13px system-ui';g.textAlign='center';g.fillStyle=sub;
+ if(!ar.pos){g.fillText('Waiting for GPS…',c,c);cv._pts=[];return}
+ const pts=ar.pins.map(p=>{const r=rel(ar.pos,pinTarget(p));return{p,d:r.d,b:rad(r.brg)}});
+ const maxD=Math.max(20,...pts.map(x=>x.d))*1.15,R=c-18;
+ g.strokeStyle=line;g.lineWidth=1;[.5,1].forEach(f=>{g.beginPath();g.arc(c,c,R*f,0,7);g.stroke()});
+ g.beginPath();g.moveTo(c,c-R);g.lineTo(c,c+R);g.moveTo(c-R,c);g.lineTo(c+R,c);g.stroke();
+ g.fillStyle=sub;g.fillText('N',c,12);g.fillText(Math.round(maxD/2)+' m',c+R*.5+16,c-4);g.fillText(Math.round(maxD)+' m',c+R-14,c-4);
+ if(ar.pose){const h=rad(ar.pose.heading);g.fillStyle='rgba(59,130,246,.22)';g.beginPath();g.moveTo(c,c);g.arc(c,c,R,h-Math.PI/2-.45,h-Math.PI/2+.45);g.closePath();g.fill()}
+ g.fillStyle=txt;g.beginPath();g.arc(c,c,5,0,7);g.fill();
+ cv._pts=pts.map(x=>{const px=c+Math.sin(x.b)*x.d/maxD*R,py=c-Math.cos(x.b)*x.d/maxD*R;g.fillStyle=NOTE_COLORS[x.p.emoji]||NOTE_COLORS.yellow;g.strokeStyle='#222';g.lineWidth=1.5;g.beginPath();g.arc(px,py,8,0,7);g.fill();g.stroke();return{x:px,y:py,p:x.p}});
+}
 function arListModal(){
  if(!ar)return;
  const pins=ar.pins.slice().reverse();
- modal(`<h3>Notes in this chat</h3>${pins.length?pins.map(p=>{
+ const listHtml=pins.length?pins.map(p=>{
   const u=users[p.from]||{name:'Someone'};let dist='';
   if(ar.pos){const r=rel(ar.pos,pinTarget(p));dist=r.d<1000?Math.round(r.d)+' m away':(r.d/1000).toFixed(1)+' km away'}
-  return `<div class="mem" data-id="${esc(p.id)}" style="cursor:pointer"><span class="sw" style="background:${NOTE_COLORS[p.emoji]||NOTE_COLORS.yellow};border-radius:6px"></span><div class="grow"><b>${esc(p.text.slice(0,70))}</b><br><span style="color:var(--sub);font-size:12px">${esc(u.name)}${dist?' · '+dist:''}</span></div></div>`}).join(''):'<p style="color:var(--sub)">No notes yet. Tap "Pin a note" while pointing at something.</p>'}<div class="acts"><button class="btn" id="mCancel">Close</button></div>`);
+  return `<div class="mem" data-id="${esc(p.id)}" style="cursor:pointer"><span class="sw" style="background:${NOTE_COLORS[p.emoji]||NOTE_COLORS.yellow};border-radius:6px"></span><div class="grow"><b>${esc(p.text.slice(0,70))}</b><br><span style="color:var(--sub);font-size:12px">${esc(u.name)}${dist?' · '+dist:''}</span></div></div>`}).join(''):'<p style="color:var(--sub)">No notes yet. Tap "Pin a note" while pointing at something.</p>';
+ modal(`<h3>Notes in this chat</h3><div class="seg" id="arTabs" style="margin-bottom:10px"><button class="on" data-t="list">List</button><button data-t="radar">Radar</button></div><div id="arPane">${listHtml}</div><div class="acts"><button class="btn" id="mCancel">Close</button></div>`);
  bindModal({mCancel:closeModal});
+ let timer=null;
+ const stop=()=>{clearInterval(timer);timer=null};
+ $('#arTabs').onclick=e=>{
+  const b=e.target.closest('[data-t]');if(!b)return;
+  document.querySelectorAll('#arTabs button').forEach(x=>x.classList.toggle('on',x===b));stop();
+  if(b.dataset.t==='list'){$('#arPane').innerHTML=listHtml;return}
+  $('#arPane').innerHTML='<canvas id="radar" width="320" height="320" style="width:100%;max-width:320px;display:block;margin:0 auto"></canvas><p style="color:var(--sub);font-size:12px;text-align:center">Top of the circle is north. The blue wedge is where your phone points. Tap a dot to read the note. Useful when GPS is rough indoors.</p>';
+  const cv=$('#radar');drawRadar(cv);timer=setInterval(()=>{if(!$('#radar'))return stop();drawRadar($('#radar'))},500);
+  cv.onclick=ev=>{const r=cv.getBoundingClientRect(),k=cv.width/r.width,x=(ev.clientX-r.left)*k,y=(ev.clientY-r.top)*k;const hit=(cv._pts||[]).find(q=>Math.hypot(q.x-x,q.y-y)<16);if(hit)arNoteInfo(hit.p)};
+ };
  $('#modal').onclick=e=>{const el=e.target.closest('.mem[data-id]');if(el){const p=ar.pins.find(x=>x.id===el.dataset.id);if(p)arNoteInfo(p)}};
 }
 $('#arClose').onclick=closeAR;$('#arPlace').onclick=arPlaceModal;$('#arList').onclick=arListModal;

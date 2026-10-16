@@ -44,6 +44,8 @@ const PART_CHUNKS = 32;                 // a client upload part = 32 chunks (~3.
 const PART_BYTES = CHUNK * PART_CHUNKS;
 const MAX_FILE = 100 * 1024 * 1024;     // per file
 const SEG = 120;                        // messages per storage segment
+const TTLS = [0, 86400, 604800, 7776000]; // disappearing-message options (seconds)
+const STUN = [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }];
 const FILE_URL = /^\/api\/file\/[0-9a-f]{32}$/;
 const GIF_HOSTS = /^https:\/\/(media\d*\.giphy\.com|i\.giphy\.com|media\.tenor\.com|c\.tenor\.com)\//;
 const INLINE_TYPES = /^(image\/(png|jpeg|gif|webp|avif)|video\/(mp4|webm|quicktime|ogg)|audio\/(webm|ogg|mpeg|mp4|wav|aac|x-m4a))$/;
@@ -74,7 +76,8 @@ export class Hub {
     this.ctx = ctx;
     this.env = env;
     this.users = {}; this.groups = {}; this.sessions = {}; this.messages = {};
-    this.sched = {}; this.pins = {}; this.calls = {}; this.invites = {};
+    this.sched = {}; this.pins = {}; this.calls = {}; this.invites = {}; this.reports = {};
+    this.nextExp = Infinity; this.nextBackup = 0; this.iceCache = null;
     this.socks = new Map(); // WebSocket -> uid
     this.vis = new Map();   // WebSocket -> page visible?
     this.cache = new Map(); // storage key -> last JSON written (change detection)
@@ -86,7 +89,7 @@ export class Hub {
         for (const [k, v] of await s.list({ prefix })) { target[k.slice(prefix.length)] = v; this.cache.set(k, JSON.stringify(v)); }
       };
       await load('u:', this.users); await load('g:', this.groups); await load('s:', this.sessions);
-      await load('sc:', this.sched); await load('iv:', this.invites);
+      await load('sc:', this.sched); await load('iv:', this.invites); await load('rp:', this.reports);
       for (const [k, v] of await s.list({ prefix: 'p:' })) this.pins[k.slice(2)] = v;
       const segs = {};
       for (const [k, v] of await s.list({ prefix: 'm:' })) {
@@ -96,6 +99,9 @@ export class Hub {
       }
       for (const [cid, arr] of Object.entries(segs)) this.messages[cid] = arr.flat();
       for (const k of this.legacy || []) { this.saveChat(k.slice(2)); s.delete(k); }
+      this.scanExp();
+      this.nextBackup = (await s.get('nextBackup')) || this.nextBackupTime();
+      this.armAlarm();
     });
   }
 
@@ -138,7 +144,7 @@ export class Hub {
   }
   save(...chatIds) {
     this.persist('u:', this.users); this.persist('g:', this.groups); this.persist('s:', this.sessions);
-    this.persist('sc:', this.sched); this.persist('iv:', this.invites);
+    this.persist('sc:', this.sched); this.persist('iv:', this.invites); this.persist('rp:', this.reports);
     chatIds.forEach((c) => this.saveChat(c));
   }
   async getVapid() {
@@ -150,16 +156,32 @@ export class Hub {
 
   // ---- views ----
   isOnline(uid) { for (const u of this.socks.values()) if (u === uid) return true; return false; }
-  pub(u) { return { id: u.id, username: u.username, name: u.name, phone: u.phone || null, about: u.about, avatar: u.avatar, online: this.isOnline(u.id), lastSeen: u.lastSeen }; }
+  // pub(u): what other people see (respects "hide last seen / online"); pub(u, true): your own view
+  pub(u, self) {
+    const show = self || !u.hideSeen;
+    const v = { id: u.id, username: u.username, name: u.name, phone: u.phone || null, about: u.about, avatar: u.avatar, online: show ? this.isOnline(u.id) : false, lastSeen: show ? u.lastSeen : null };
+    if (self) Object.assign(v, { hideSeen: !!u.hideSeen, blocked: u.blocked || [], isAdmin: !!u.isAdmin });
+    return v;
+  }
+  isMgr(c, uid) { return c.admin === uid || (c.admins || []).includes(uid); }
   reachable(uid) { for (const [ws, u] of this.socks) if (u === uid && this.vis.get(ws) !== false) return true; return false; }
-  pubUsers(ids) { return ids.map((i) => this.users[i]).filter(Boolean).map((u) => this.pub(u)); }
+  pubUsers(ids, viewer) { return ids.map((i) => this.users[i]).filter(Boolean).map((u) => this.pub(u, u.id === viewer)); }
   slim(m) { return m.deleted ? { ...m, text: '', file: null } : m; }
+  // view-once media: recipients get no file URL until they open it (and then only once)
+  viewFor(m, uid) {
+    if (!m.once || m.from === uid || m.deleted) return m;
+    return { ...m, file: m.file && { ...m.file, url: null }, opened: (m.viewedBy || []).includes(uid) };
+  }
   chatView(c, uid) {
     const msgs = this.messages[c.id] || [];
     const last = [...msgs].reverse().find((m) => !(m.deletedFor || []).includes(uid));
     const unread = msgs.filter((m) => m.from !== uid && !m.system && !(m.readBy || []).includes(uid) && !(m.deletedFor || []).includes(uid)).length;
-    const v = { id: c.id, type: c.type, members: c.members, unread, last: last && this.slim(last), pinned: (c.pinnedBy || []).includes(uid), muted: (c.mutedBy || []).includes(uid) };
-    if (c.type === 'group') Object.assign(v, { name: c.name, number: c.number, description: c.description, admin: c.admin, onlyAdminPosts: !!c.onlyAdminPosts });
+    const v = { id: c.id, type: c.type, members: c.members, unread, last: last && this.viewFor(this.slim(last), uid), pinned: (c.pinnedBy || []).includes(uid), muted: (c.mutedBy || []).includes(uid), ttl: c.ttl || 0 };
+    if (c.type === 'group') {
+      const pm = c.pinnedMsg && msgs.find((m) => m.id === c.pinnedMsg && !m.deleted);
+      Object.assign(v, { name: c.name, number: c.number, description: c.description, admin: c.admin, admins: c.admins || [], onlyAdminPosts: !!c.onlyAdminPosts, approval: !!c.approval, icon: c.icon || null,
+        announce: pm ? { id: pm.id, text: (pm.text || '').slice(0, 200) } : null, requests: this.isMgr(c, uid) ? Object.keys(c.requests || {}).length : 0 });
+    }
     return v;
   }
   chatsFor(uid) { return Object.values(this.groups).filter((g) => g.members.includes(uid)).map((g) => this.chatView(g, uid)); }
@@ -178,14 +200,17 @@ export class Hub {
     const g = this.groups[cid]; if (!g) return;
     for (const [ws, u] of this.socks) if (ws !== except && g.members.includes(u)) this.send(ws, ev, data);
   }
+  emitMsg(cid, m) {
+    const g = this.groups[cid]; if (!g) return;
+    for (const [ws, u] of this.socks) if (g.members.includes(u)) this.send(ws, 'message', this.viewFor(m, u));
+  }
   toAll(ev, data) { for (const ws of this.socks.keys()) this.send(ws, ev, data); }
   sendChats(uid) { this.toUser(uid, 'chats', this.chatsFor(uid)); }
   refreshAll(g) {
-    const users = this.pubUsers(g.members);
-    g.members.forEach((m) => { this.toUser(m, 'users', users); this.sendChats(m); });
+    g.members.forEach((m) => { this.toUser(m, 'users', this.pubUsers(g.members, m)); this.sendChats(m); });
   }
-  addSystem(cid, text) {
-    const m = { id: id(), chat: cid, from: null, system: true, text, ts: Date.now(), readBy: [] };
+  addSystem(cid, text, extra) {
+    const m = { id: id(), chat: cid, from: null, system: true, text, ts: Date.now(), readBy: [], ...(extra || {}) };
     (this.messages[cid] = this.messages[cid] || []).push(m);
     this.toChat(cid, 'message', m);
   }
@@ -199,13 +224,15 @@ export class Hub {
       const [client, server] = Object.values(pair);
       server.accept();
       const uid = this.sessions[url.searchParams.get('token')];
-      if (!uid || !this.users[uid]) { server.close(4001, 'auth'); return new Response(null, { status: 101, webSocket: client }); }
+      if (!uid || !this.users[uid] || this.users[uid].banned) { server.close(4001, 'auth'); return new Response(null, { status: 101, webSocket: client }); }
       this.onConnect(server, uid);
       return new Response(null, { status: 101, webSocket: client });
     }
     if (url.pathname === '/api/register' && request.method === 'POST') return this.register(await request.json().catch(() => ({})));
     if (url.pathname === '/api/login' && request.method === 'POST') return this.login(await request.json().catch(() => ({})));
     if (url.pathname === '/api/push/key' && request.method === 'GET') return json({ key: (await this.getVapid()).pub });
+    if (url.pathname === '/api/ice' && request.method === 'GET') return this.iceServers(request);
+    if (url.pathname === '/api/admin/backup' && request.method === 'GET') return this.adminBackup(request, url);
     if (url.pathname === '/api/upload/start' && request.method === 'POST') return this.uploadStart(request);
     if (url.pathname === '/api/upload/part' && request.method === 'POST') return this.uploadPart(request, url);
     if (url.pathname === '/api/upload/finish' && request.method === 'POST') return this.uploadFinish(request);
@@ -231,7 +258,7 @@ export class Hub {
     if (String(password || '').length < 4) return json({ error: 'Password must be at least 4 characters' }, 400);
     if (this.findByPhone(ph)) return json({ error: 'That mobile number is already registered' }, 400);
     if (this.findByName(name)) return json({ error: 'That username is already taken' }, 400);
-    const u = { id: id(), username: name, name, phone: ph, pw: await hashPw(String(password)), about: 'Hey there! I am using MK Messages', avatar: null, lastSeen: Date.now(), push: [], stickers: [] };
+    const u = { id: id(), username: name, name, phone: ph, pw: await hashPw(String(password)), about: 'Hey there! I am using MK Messages', avatar: null, lastSeen: Date.now(), push: [], stickers: [], isAdmin: Object.keys(this.users).length === 0 };
     this.users[u.id] = u;
     const token = this.newSession(u.id);
     this.save();
@@ -240,6 +267,7 @@ export class Hub {
   async login({ ident, username, phone, password }) {
     const u = this.findUser(ident || phone || username);
     if (!u || !(await verifyPw(String(password || ''), u.pw))) return json({ error: 'Wrong number, username or password' }, 400);
+    if (u.banned) return json({ error: 'This account has been suspended' }, 403);
     const token = this.newSession(u.id);
     this.save();
     return json({ token, user: this.pub(u) });
@@ -355,8 +383,8 @@ export class Hub {
   // ---- WebSocket ----
   onConnect(ws, uid) {
     this.socks.set(ws, uid);
-    this.send(ws, 'init', { me: this.pub(this.users[uid]), chats: this.chatsFor(uid), users: this.pubUsers(this.allMemberIds(uid)), calls: this.callsFor(uid), invites: this.invitesFor(uid), stickers: this.users[uid].stickers || [] });
-    this.toAll('presence', { id: uid, online: true });
+    this.send(ws, 'init', { me: this.pub(this.users[uid], true), chats: this.chatsFor(uid), users: this.pubUsers(this.allMemberIds(uid), uid), calls: this.callsFor(uid), invites: this.invitesFor(uid), stickers: this.users[uid].stickers || [] });
+    if (!this.users[uid].hideSeen) this.toAll('presence', { id: uid, online: true });
     ws.addEventListener('message', async (e) => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
       const h = this.handlers[m.ev];
@@ -372,7 +400,7 @@ export class Hub {
         this.leaveCalls(uid);
         this.users[uid].lastSeen = Date.now();
         this.save();
-        this.toAll('presence', { id: uid, online: false, lastSeen: this.users[uid].lastSeen });
+        if (!this.users[uid].hideSeen) this.toAll('presence', { id: uid, online: false, lastSeen: this.users[uid].lastSeen });
       }
     };
     ws.addEventListener('close', gone);
@@ -380,41 +408,85 @@ export class Hub {
   }
 
   // ---- messages ----
-  deliver(uid, chat, { text, file, replyTo, forwarded }) {
+  deliver(uid, chat, { text, file, replyTo, forwarded, once, poll, mentions }) {
     const c = this.chatOf(uid, chat);
     if (!c) return { error: 'Not a member' };
-    if (c.type === 'group' && c.onlyAdminPosts && c.admin !== uid) return { error: 'Only the admin can send messages here' };
+    if (c.type === 'group' && c.onlyAdminPosts && !this.isMgr(c, uid)) return { error: 'Only admins can send messages here' };
+    if (c.type === 'dm') {
+      const other = this.users[c.members.find((m) => m !== uid)];
+      if (other && (other.blocked || []).includes(uid)) return { error: "You can't send messages to this person" };
+      if (other && (this.users[uid].blocked || []).includes(other.id)) return { error: 'Unblock this person to send messages' };
+    }
     text = String(text || '').slice(0, 4000);
     file = cleanFile(file);
     if (file === undefined) return { error: 'Invalid attachment' };
-    if (!text.trim() && !file) return { ok: true };
+    let pl = null;
+    if (poll) {
+      const q = String(poll.q || '').trim().slice(0, 200);
+      const opts = (Array.isArray(poll.opts) ? poll.opts : []).map((o) => String(o || '').trim().slice(0, 80)).filter(Boolean).slice(0, 8);
+      if (!q || opts.length < 2) return { error: 'A poll needs a question and at least two options' };
+      pl = { q, opts: opts.map((t) => ({ t, v: [] })), multi: !!poll.multi, closed: false };
+    }
+    if (!text.trim() && !file && !pl) return { ok: true };
+    const isOnce = !!once && !!file && /^(image|video)\//.test(file.type) && FILE_URL.test(file.url);
+    const ment = (Array.isArray(mentions) ? mentions : []).filter((x) => x !== uid && c.members.includes(x)).slice(0, 20);
     const list = (this.messages[chat] = this.messages[chat] || []);
     let rp = null;
     if (replyTo) {
       const o = list.find((m) => m.id === replyTo);
-      if (o) rp = { id: o.id, from: o.from, text: o.deleted ? 'Message deleted' : o.text || (o.file ? 'Attachment: ' + o.file.name : '') };
+      if (o) rp = { id: o.id, from: o.from, text: o.deleted ? 'Message deleted' : o.text || (o.poll ? 'Poll: ' + o.poll.q : o.file ? 'Attachment: ' + o.file.name : '') };
     }
     const m = { id: id(), chat, from: uid, text, ts: Date.now(), file: file || null, replyTo: rp, forwarded: !!forwarded, reactions: {}, readBy: [uid], deliveredTo: [uid], starredBy: [] };
+    if (isOnce) { m.once = true; m.viewedBy = []; }
+    if (pl) m.poll = pl;
+    if (ment.length) m.mentions = ment;
+    if (c.ttl) { m.exp = Date.now() + c.ttl * 1000; if (m.exp < this.nextExp) { this.nextExp = m.exp; this.armAlarm(); } }
     c.members.forEach((mm) => { if (mm !== uid && this.isOnline(mm)) m.deliveredTo.push(mm); });
     list.push(m);
     if (list.length > MAX_MSGS) list.splice(0, list.length - MAX_MSGS).forEach((x) => this.purgeFile(x.file));
     this.saveChat(chat);
-    this.toChat(chat, 'message', m);
+    this.emitMsg(chat, m);
     c.members.forEach((mm) => this.sendChats(mm));
     const sender = this.users[uid];
-    const body = (c.type === 'group' ? sender.name + ': ' : '') + (text.trim() ? text.trim().slice(0, 120) : 'Sent an attachment');
+    const what = text.trim() ? text.trim().slice(0, 120) : pl ? 'Poll: ' + pl.q : isOnce ? 'Sent a view-once photo or video' : 'Sent an attachment';
     c.members.forEach((mm) => {
-      if (mm === uid || this.reachable(mm) || (c.mutedBy || []).includes(mm)) return;
-      this.pushTo(mm, { t: 'msg', chat, title: c.type === 'group' ? c.name : sender.name, body });
+      if (mm === uid || this.reachable(mm)) return;
+      const mentioned = ment.includes(mm);
+      if ((c.mutedBy || []).includes(mm) && !mentioned) return;
+      this.pushTo(mm, { t: 'msg', chat, title: c.type === 'group' ? c.name : sender.name, body: mentioned ? sender.name + ' mentioned you: ' + what : (c.type === 'group' ? sender.name + ': ' : '') + what });
     });
     return { ok: true, m };
   }
 
-  // ---- scheduled messages ----
+  // ---- alarm: scheduled messages, disappearing messages, daily backup ----
+  nextBackupTime() { const d = new Date(); d.setUTCHours(3, 30, 0, 0); if (d.getTime() <= Date.now()) d.setUTCDate(d.getUTCDate() + 1); return d.getTime(); }
+  scanExp() { let t = Infinity; for (const list of Object.values(this.messages)) for (const m of list) if (m.exp && m.exp < t) t = m.exp; this.nextExp = t; }
+  purgeExpired() {
+    const now = Date.now();
+    for (const [cid, list] of Object.entries(this.messages)) {
+      const keep = [], gone = [];
+      for (const m of list) (m.exp && m.exp <= now ? gone : keep).push(m);
+      if (!gone.length) continue;
+      this.messages[cid] = keep;
+      gone.forEach((m) => this.purgeFile(m.file));
+      this.saveChat(cid);
+      gone.forEach((m) => this.toChat(cid, 'message:remove', { chat: cid, id: m.id }));
+      const g = this.groups[cid]; if (g) g.members.forEach((mm) => this.sendChats(mm));
+    }
+    this.scanExp();
+  }
+  snapshotJson() { return JSON.stringify({ version: 2, at: Date.now(), users: this.users, groups: this.groups, messages: this.messages, sched: this.sched, pins: this.pins, invites: this.invites, reports: this.reports }); }
+  async takeSnapshot() {
+    if (!this.env.BACKUPS) return null;
+    const json = this.snapshotJson();
+    const gz = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();
+    const name = 'snap:' + new Date().toISOString().slice(0, 10);
+    await this.env.BACKUPS.put(name, gz, { expirationTtl: 30 * 86400, metadata: { at: Date.now(), size: gz.byteLength, raw: json.length } });
+    return name;
+  }
   armAlarm() {
-    const ts = Object.values(this.sched).map((i) => i.at);
+    const ts = [...Object.values(this.sched).map((i) => i.at), this.nextExp, this.nextBackup].filter(Number.isFinite);
     if (ts.length) this.ctx.storage.setAlarm(Math.max(Math.min(...ts), Date.now() + 1000));
-    else this.ctx.storage.deleteAlarm();
   }
   async alarm() {
     const now = Date.now();
@@ -423,6 +495,12 @@ export class Hub {
       delete this.sched[k];
       const r = this.deliver(it.from, it.chat, it);
       this.toUser(it.from, 'schedule:done', { id: it.id, error: r.error || null });
+    }
+    if (this.nextExp <= now) this.purgeExpired();
+    if (this.nextBackup <= now) {
+      try { await this.takeSnapshot(); } catch (e) { console.error('backup failed', e); }
+      this.nextBackup = this.nextBackupTime();
+      await this.ctx.storage.put('nextBackup', this.nextBackup);
     }
     this.save();
     this.armAlarm();
@@ -443,7 +521,12 @@ export class Hub {
     if (!call.users.length) {
       delete this.calls[cid];
       const mins = Math.max(1, Math.round((Date.now() - call.started) / 60000));
-      this.addSystem(cid, `Call ended after ${mins} min`);
+      const st = this.users[call.starter], kind = call.video ? 'video' : 'voice';
+      if (!call.answered) {
+        this.addSystem(cid, `Missed ${kind} call from ${st ? st.name : 'someone'}`, { call: { missed: true, by: call.starter, video: call.video } });
+        const gm = this.groups[cid];
+        if (gm) gm.members.forEach((mm) => { if (mm !== call.starter && !this.reachable(mm)) this.pushTo(mm, { t: 'msg', chat: cid, title: gm.type === 'group' ? gm.name : (st ? st.name : 'Missed call'), body: `Missed ${kind} call from ${st ? st.name : 'someone'}` }); });
+      } else this.addSystem(cid, `${kind[0].toUpperCase() + kind.slice(1)} call ended after ${mins} min`, { call: { dur: mins, video: call.video } });
       this.saveChat(cid);
       const g0 = this.groups[cid];
       if (g0) g0.members.forEach((m) => this.pushTo(m, { t: 'call-end', chat: cid }, { ttl: 30, urgency: 'high' }));
@@ -466,8 +549,19 @@ export class Hub {
       if (dead.length) { u.push = u.push.filter((x) => !dead.includes(x.endpoint)); this.save(); }
     })());
   }
-  joinGroup(uid, g, how) {
+  joinGroup(uid, g, how, viaAdmin) {
     if (g.members.includes(uid)) return false;
+    if (g.type === 'group' && g.approval && !viaAdmin) {
+      g.requests = g.requests || {};
+      if (!g.requests[uid]) {
+        g.requests[uid] = Date.now();
+        this.save();
+        const me = this.users[uid];
+        g.members.filter((m) => this.isMgr(g, m)).forEach((m) => { this.sendChats(m); this.toUser(m, 'join:request', { chat: g.id, chatName: g.name, user: uid, name: me.name }); if (!this.reachable(m)) this.pushTo(m, { t: 'invite', title: g.name, body: me.name + ' asked to join' }); });
+      }
+      return 'pending';
+    }
+    delete (g.requests || {})[uid];
     g.members.push(uid);
     this.addSystem(g.id, `${this.users[uid].name} ${how}`);
     this.save(g.id);
@@ -480,8 +574,36 @@ export class Hub {
   }
   invitesFor(uid) { return Object.values(this.invites).filter((i) => i.to === uid && this.groups[i.chat]).map((i) => this.inviteView(i)); }
 
+  // ---- call relay (TURN) so calls connect on strict networks; needs TURN_KEY_ID + TURN_KEY_API_TOKEN secrets ----
+  async iceServers(request) {
+    if (!this.authed(request)) return json({ error: 'Not signed in' }, 401);
+    const k = this.env.TURN_KEY_ID, t = this.env.TURN_KEY_API_TOKEN;
+    if (!k || !t) return json({ iceServers: STUN, relay: false });
+    if (this.iceCache && this.iceCache.exp > Date.now()) return json(this.iceCache.v);
+    try {
+      const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${k}/credentials/generate-ice-servers`, { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify({ ttl: 86400 }) });
+      const d = await r.json();
+      if (!r.ok || !Array.isArray(d.iceServers)) throw new Error('turn ' + r.status);
+      const v = { iceServers: d.iceServers, relay: true };
+      this.iceCache = { v, exp: Date.now() + 3600e3 };
+      return json(v);
+    } catch (e) { console.error('ice', e); return json({ iceServers: STUN, relay: false }); }
+  }
+  async adminBackup(request, url) {
+    const uid = this.authed(request), u = uid && this.users[uid];
+    if (!u || !u.isAdmin) return json({ error: 'Admins only' }, 403);
+    const snap = url.searchParams.get('snap');
+    if (snap) {
+      if (!this.env.BACKUPS || !/^snap:\d{4}-\d{2}-\d{2}$/.test(snap)) return json({ error: 'Not found' }, 404);
+      const v = await this.env.BACKUPS.get(snap, 'arrayBuffer');
+      if (!v) return json({ error: 'Not found' }, 404);
+      return new Response(v, { headers: { 'Content-Type': 'application/gzip', 'Content-Disposition': `attachment; filename="mk-messages-${snap.slice(5)}.json.gz"` } });
+    }
+    return new Response(this.snapshotJson(), { headers: { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="mk-messages-backup-${new Date().toISOString().slice(0, 10)}.json"` } });
+  }
+
   chatOf(uid, cid) { const c = this.groups[cid]; return c && c.members.includes(uid) ? c : null; }
-  canManage(c, me) { return c.admin === me.id; }
+  canManage(c, me) { return this.isMgr(c, me.id); }
   findMsg(cid, mid) { return (this.messages[cid] || []).find((x) => x.id === mid); }
 
   get handlers() {
@@ -500,7 +622,8 @@ export class Hub {
         const g = Object.values(this.groups).find((x) => x.type === 'group' && x.number === String(number || '').trim());
         if (!g) return cb({ error: 'No group with that number' });
         if (g.members.includes(uid)) return cb({ ok: true, chat: this.chatView(g, uid), already: true });
-        this.joinGroup(uid, g, 'joined using the group code');
+        const r = this.joinGroup(uid, g, 'joined using the group code');
+        if (r === 'pending') return cb({ ok: true, pending: true, name: g.name });
         cb({ ok: true, chat: this.chatView(g, uid) });
       },
       'group:leave'({ uid, me }, { chat }, cb) {
@@ -512,12 +635,18 @@ export class Hub {
         this.refreshAll(g);
         cb({ ok: true });
       },
-      'group:update'({ uid, me }, { chat, name, description, onlyAdminPosts }, cb) {
+      'group:update'({ uid, me }, { chat, name, description, onlyAdminPosts, approval, icon }, cb) {
         const g = this.chatOf(uid, chat);
-        if (!g || !this.canManage(g, me)) return cb({ error: 'Admin only' });
+        if (!g || g.type !== 'group' || !this.canManage(g, me)) return cb({ error: 'Admin only' });
         if (name) g.name = String(name).trim().slice(0, 40);
         if (description !== undefined) g.description = String(description).slice(0, 200);
         if (onlyAdminPosts !== undefined) g.onlyAdminPosts = !!onlyAdminPosts;
+        if (approval !== undefined) g.approval = !!approval;
+        if (icon !== undefined) {
+          const old = g.icon;
+          g.icon = icon && FILE_URL.test(String(icon)) ? String(icon) : null;
+          if (old && old !== g.icon) { this.save(); this.purgeFile({ url: old }); }
+        }
         this.save();
         this.refreshAll(g);
         cb({ ok: true });
@@ -525,9 +654,11 @@ export class Hub {
       'group:remove'({ uid, me }, { chat, user }, cb) {
         const g = this.chatOf(uid, chat);
         if (!g || !this.canManage(g, me)) return cb({ error: 'Admin only' });
-        if (user === g.admin) return cb({ error: 'Cannot remove the group admin' });
+        if (user === g.admin) return cb({ error: 'Cannot remove the group owner' });
+        if ((g.admins || []).includes(user) && g.admin !== uid) return cb({ error: 'Only the group owner can remove an admin' });
         const target = this.users[user];
         g.members = g.members.filter((m) => m !== user);
+        g.admins = (g.admins || []).filter((m) => m !== user);
         this.addSystem(g.id, `${me.name} removed ${target ? target.name : 'a member'}`);
         this.save(g.id);
         this.sendChats(user);
@@ -545,9 +676,9 @@ export class Hub {
       },
       'group:delete'({ uid, me }, { chat }, cb) {
         const g = this.chatOf(uid, chat);
-        if (!g || !this.canManage(g, me)) return cb({ error: 'Admin only' });
+        if (!g || g.admin !== uid) return cb({ error: 'Only the group owner can delete the group' });
         const members = g.members.slice();
-        const gone = [...(this.messages[g.id] || []).map((x) => x.file), ...(this.pins[g.id] || []).map((x) => x.photo && { url: x.photo })];
+        const gone = [...(this.messages[g.id] || []).map((x) => x.file), ...(this.pins[g.id] || []).map((x) => x.photo && { url: x.photo }), g.icon && { url: g.icon }];
         delete this.pins[g.id]; this.ctx.storage.delete('p:' + g.id); delete this.calls[g.id];
         Object.keys(this.invites).forEach((k) => { if (this.invites[k].chat === g.id) delete this.invites[k]; });
         Object.keys(this.sched).forEach((k) => { if (this.sched[k].chat === g.id) delete this.sched[k]; });
@@ -559,6 +690,49 @@ export class Hub {
         members.forEach((m) => { this.toUser(m, 'chat:deleted', g.id); this.sendChats(m); });
         cb({ ok: true });
       },
+      'group:admin'({ uid, me }, { chat, user, on }, cb) {
+        const g = this.chatOf(uid, chat);
+        if (!g || g.type !== 'group' || g.admin !== uid) return cb({ error: 'Only the group owner can change admins' });
+        if (!g.members.includes(user) || user === g.admin) return cb({ error: 'Not a member' });
+        g.admins = (g.admins || []).filter((m) => m !== user);
+        if (on) g.admins.push(user);
+        this.addSystem(g.id, `${me.name} ${on ? 'made' : 'removed'} ${this.users[user].name} ${on ? 'an admin' : 'as admin'}`);
+        this.save(g.id); this.refreshAll(g);
+        cb({ ok: true });
+      },
+      'group:pin'({ uid, me }, { chat, id: mid }, cb) {
+        const g = this.chatOf(uid, chat);
+        if (!g || g.type !== 'group' || !this.isMgr(g, uid)) return cb({ error: 'Admins only' });
+        const m = mid && this.findMsg(chat, mid);
+        if (mid && (!m || m.deleted || !m.text)) return cb({ error: 'Only text messages can be pinned' });
+        g.pinnedMsg = mid || null;
+        this.save(); this.refreshAll(g);
+        cb({ ok: true });
+      },
+      'group:requests'({ uid }, { chat }, cb) {
+        const g = this.chatOf(uid, chat);
+        if (!g || !this.isMgr(g, uid)) return cb({ error: 'Admins only' });
+        cb({ requests: Object.entries(g.requests || {}).filter(([u]) => this.users[u]).map(([u, ts]) => ({ user: this.pub(this.users[u]), ts })) });
+      },
+      'group:approve'({ uid, me }, { chat, user, ok }, cb) {
+        const g = this.chatOf(uid, chat);
+        if (!g || !this.isMgr(g, uid)) return cb({ error: 'Admins only' });
+        if (!(g.requests || {})[user]) return cb({ error: 'No such request' });
+        if (ok) { this.joinGroup(user, g, `joined (approved by ${me.name})`, true); this.pushTo(user, { t: 'invite', title: g.name, body: 'You can now chat in ' + g.name }); }
+        else { delete g.requests[user]; this.save(); this.refreshAll(g); }
+        this.toUser(user, 'join:result', { chat: g.id, name: g.name, ok: !!ok });
+        cb({ ok: true });
+      },
+      'chat:ttl'({ uid, me }, { chat, ttl }, cb) {
+        const c = this.chatOf(uid, chat);
+        if (!c || !(TTLS.includes(+ttl) || (this.env.TEST_FAST_TTL && +ttl === 2))) return cb({ error: 'Not allowed' });
+        if (c.type === 'group' && !this.isMgr(c, uid)) return cb({ error: 'Only admins can change this' });
+        c.ttl = +ttl;
+        const label = { 0: 'off', 2: '2 seconds', 86400: '24 hours', 604800: '7 days', 7776000: '90 days' }[+ttl];
+        this.addSystem(c.id, `${me.name} turned disappearing messages ${label === 'off' ? 'off' : 'on (' + label + ')'}`);
+        this.save(c.id); c.members.forEach((m) => this.sendChats(m));
+        cb({ ok: true });
+      },
       'dm:open'({ uid }, { username, user }, cb) {
         const other = user ? this.users[user] : this.findUser(username);
         if (!other || other.id === uid) return cb({ error: 'User not found' });
@@ -568,10 +742,10 @@ export class Hub {
         this.refreshAll(c);
         cb({ ok: true, chat: this.chatView(c, uid) });
       },
-      'chat:history'({ uid }, { chat }, cb) {
+      'chat:history'({ uid }, { chat, all }, cb) {
         if (!this.chatOf(uid, chat)) return cb({ error: 'Not a member' });
         const msgs = (this.messages[chat] || []).filter((m) => !(m.deletedFor || []).includes(uid));
-        cb({ messages: msgs.slice(-300).map((m) => this.slim(m)) });
+        cb({ messages: msgs.slice(all ? -MAX_MSGS : -300).map((m) => this.viewFor(this.slim(m), uid)) });
       },
       'message:send'({ uid }, d, cb) {
         const r = this.deliver(uid, d.chat, d);
@@ -660,8 +834,9 @@ export class Hub {
         if (avatar !== undefined) me.avatar = avatar;
         this.save();
         const pu = [this.pub(me)];
-        this.allMemberIds(uid).forEach((u) => this.toUser(u, 'users', pu));
-        cb({ ok: true, user: pu[0] });
+        this.allMemberIds(uid).forEach((u) => { if (u !== uid) this.toUser(u, 'users', pu); });
+        this.toUser(uid, 'users', [this.pub(me, true)]);
+        cb({ ok: true, user: this.pub(me, true) });
       },
       'message:schedule'({ uid }, { chat, text, file, replyTo, at }, cb) {
         const c = this.chatOf(uid, chat);
@@ -695,7 +870,11 @@ export class Hub {
         if (!c) return cb({ error: 'Not a member' });
         let call = this.calls[chat];
         const fresh = !call;
-        if (fresh) call = this.calls[chat] = { id: id(), chat, video: !!video, started: Date.now(), users: [] };
+        if (c.type === 'dm') {
+          const other = this.users[c.members.find((m) => m !== uid)];
+          if (other && ((other.blocked || []).includes(uid) || (me.blocked || []).includes(other.id))) return cb({ error: "You can't call this person" });
+        }
+        if (fresh) call = this.calls[chat] = { id: id(), chat, video: !!video, started: Date.now(), users: [], starter: uid, answered: false };
         if (call.users.includes(uid)) return cb({ error: 'Already in this call' });
         const others = call.users.slice();
         call.users.push(uid);
@@ -707,7 +886,7 @@ export class Hub {
             this.toUser(m, 'call:ring', { chat, from: uid, video: call.video, id: call.id });
             this.pushTo(m, { t: 'call', chat, from: me.name, video: call.video, title: c.type === 'group' ? c.name : me.name }, { ttl: 45, urgency: 'high' });
           });
-        } else others.forEach((u) => this.toUser(u, 'call:joined', { chat, user: uid }));
+        } else { call.answered = true; others.forEach((u) => this.toUser(u, 'call:joined', { chat, user: uid })); }
         c.members.forEach((m) => this.toUser(m, 'call:state', { chat, call: this.callView(call) }));
         cb({ ok: true, call: { id: call.id, video: call.video, users: others } });
       },
@@ -774,7 +953,8 @@ export class Hub {
         const g = this.groups[iv.chat];
         delete this.invites[iid];
         if (!g) { this.save(); return cb({ error: 'That group no longer exists' }); }
-        this.joinGroup(uid, g, 'joined by invitation');
+        const r = this.joinGroup(uid, g, 'joined by invitation', this.isMgr(g, iv.from));
+        if (r === 'pending') return cb({ ok: true, pending: true, name: g.name });
         cb({ ok: true, chat: this.chatView(g, uid) });
       },
       'invite:decline'({ uid }, { id: iid }, cb) {
@@ -812,9 +992,135 @@ export class Hub {
         cb({ ok: true });
       },
       'app:vis'({ ws }, { v }) { this.vis.set(ws, !!v); },
+      'once:view'({ uid }, { chat, id: mid }, cb) {
+        const c = this.chatOf(uid, chat), m = c && this.findMsg(chat, mid);
+        if (!m || !m.once || m.deleted || !m.file) return cb({ error: 'Not available' });
+        if (m.from === uid) return cb({ url: m.file.url, type: m.file.type });
+        if ((m.viewedBy || []).includes(uid)) return cb({ error: 'You already opened this' });
+        m.viewedBy = (m.viewedBy || []).concat(uid);
+        this.saveChat(chat);
+        this.toUser(m.from, 'message:update', { chat, id: mid, viewedBy: m.viewedBy });
+        cb({ url: m.file.url, type: m.file.type });
+      },
+      'poll:vote'({ uid }, { chat, id: mid, opt }, cb) {
+        const m = this.chatOf(uid, chat) && this.findMsg(chat, mid);
+        if (!m || !m.poll || m.poll.closed) return cb({ error: 'This poll is closed' });
+        const o = m.poll.opts[opt];
+        if (!o) return cb({ error: 'Bad option' });
+        const had = o.v.includes(uid);
+        if (!m.poll.multi) m.poll.opts.forEach((x) => { x.v = x.v.filter((u) => u !== uid); });
+        if (had) o.v = o.v.filter((u) => u !== uid); else if (!o.v.includes(uid)) o.v.push(uid);
+        this.saveChat(chat);
+        this.toChat(chat, 'message:update', { chat, id: mid, poll: m.poll });
+        cb({ ok: true });
+      },
+      'poll:close'({ uid }, { chat, id: mid }, cb) {
+        const m = this.chatOf(uid, chat) && this.findMsg(chat, mid);
+        if (!m || !m.poll || m.from !== uid) return cb({ error: 'Not allowed' });
+        m.poll.closed = true;
+        this.saveChat(chat);
+        this.toChat(chat, 'message:update', { chat, id: mid, poll: m.poll });
+        cb({ ok: true });
+      },
+      'search:msgs'({ uid }, { q }, cb) {
+        q = String(q || '').trim().toLowerCase();
+        if (q.length < 2) return cb({ results: [] });
+        const out = [];
+        for (const c of Object.values(this.groups)) {
+          if (!c.members.includes(uid)) continue;
+          for (const m of this.messages[c.id] || []) {
+            if (m.system || m.deleted || (m.deletedFor || []).includes(uid) || (m.text || '').startsWith('::label:')) continue;
+            const t = m.text || (m.poll ? m.poll.q : '');
+            if (t.toLowerCase().includes(q)) out.push({ chat: c.id, id: m.id, text: t.slice(0, 160), from: m.from, ts: m.ts });
+          }
+        }
+        out.sort((a, b) => b.ts - a.ts);
+        cb({ results: out.slice(0, 40) });
+      },
+      'star:list'({ uid }, _d, cb) {
+        const out = [];
+        for (const c of Object.values(this.groups)) {
+          if (!c.members.includes(uid)) continue;
+          for (const m of this.messages[c.id] || []) if (!m.deleted && !(m.deletedFor || []).includes(uid) && (m.starredBy || []).includes(uid)) out.push({ chat: c.id, id: m.id, text: (m.text || (m.poll ? 'Poll: ' + m.poll.q : m.file ? m.file.name : '')).slice(0, 160), from: m.from, ts: m.ts });
+        }
+        out.sort((a, b) => b.ts - a.ts);
+        cb({ results: out.slice(0, 100) });
+      },
+      'media:list'({ uid }, { chat }, cb) {
+        if (!this.chatOf(uid, chat)) return cb({ error: 'Not a member' });
+        const items = (this.messages[chat] || []).filter((m) => m.file && !m.once && !m.deleted && !(m.deletedFor || []).includes(uid)).slice(-300).reverse().map((m) => ({ id: m.id, ts: m.ts, from: m.from, file: m.file }));
+        cb({ items });
+      },
+      'calls:history'({ uid }, _d, cb) {
+        const out = [];
+        for (const c of Object.values(this.groups)) {
+          if (!c.members.includes(uid)) continue;
+          for (const m of this.messages[c.id] || []) if (m.call) out.push({ chat: c.id, id: m.id, ts: m.ts, text: m.text, call: m.call });
+        }
+        out.sort((a, b) => b.ts - a.ts);
+        cb({ items: out.slice(0, 60) });
+      },
+      'user:block'({ uid, me }, { user, on }, cb) {
+        if (!this.users[user] || user === uid) return cb({ error: 'Not found' });
+        me.blocked = (me.blocked || []).filter((x) => x !== user);
+        if (on) me.blocked.push(user);
+        this.save();
+        cb({ ok: true, blocked: me.blocked });
+      },
+      'user:report'({ uid, me }, { user, chat, reason }, cb) {
+        if (!this.users[user] || user === uid) return cb({ error: 'Not found' });
+        const recent = (this.messages[chat] || []).filter((m) => m.from === user && m.text).slice(-5).map((m) => m.text.slice(0, 200));
+        const r = { id: id(), from: uid, user, chat: chat || null, reason: String(reason || '').slice(0, 300), ts: Date.now(), recent };
+        this.reports[r.id] = r;
+        const keys = Object.keys(this.reports);
+        if (keys.length > 200) for (const k of keys.slice(0, keys.length - 200)) delete this.reports[k];
+        this.save();
+        cb({ ok: true });
+      },
+      'privacy:set'({ uid, me }, { hideSeen }, cb) {
+        me.hideSeen = !!hideSeen;
+        this.save();
+        const pu = [this.pub(me)];
+        this.allMemberIds(uid).forEach((u) => { if (u !== uid) this.toUser(u, 'users', pu); });
+        this.toUser(uid, 'users', [this.pub(me, true)]);
+        cb({ ok: true });
+      },
+      async 'admin:stats'({ me }, _d, cb) {
+        if (!me.isAdmin) return cb({ error: 'Admins only' });
+        let files = 0, bytes = 0;
+        for (const [, v] of await this.ctx.storage.list({ prefix: 'fm:' })) { files++; bytes += v.size; }
+        const groups = Object.values(this.groups);
+        let backups = [];
+        if (this.env.BACKUPS) { try { backups = (await this.env.BACKUPS.list({ prefix: 'snap:' })).keys.map((k) => ({ name: k.name, at: k.metadata && k.metadata.at, size: k.metadata && k.metadata.size })).sort((a, b) => (b.at || 0) - (a.at || 0)); } catch {} }
+        cb({
+          users: Object.keys(this.users).length, groups: groups.filter((g) => g.type === 'group').length, dms: groups.filter((g) => g.type === 'dm').length,
+          messages: Object.values(this.messages).reduce((n, l) => n + l.length, 0), online: new Set(this.socks.values()).size, files, bytes,
+          pushDevices: Object.values(this.users).reduce((n, u) => n + (u.push || []).length, 0),
+          backupsOn: !!this.env.BACKUPS, backups, relayOn: !!(this.env.TURN_KEY_ID && this.env.TURN_KEY_API_TOKEN),
+          reports: Object.values(this.reports).sort((a, b) => b.ts - a.ts).slice(0, 50).map((r) => ({ ...r, fromName: (this.users[r.from] || {}).name, userName: (this.users[r.user] || {}).name, banned: !!(this.users[r.user] || {}).banned })),
+          people: Object.values(this.users).sort((a, b) => b.lastSeen - a.lastSeen).slice(0, 200).map((u) => ({ id: u.id, name: u.name, phone: u.phone || null, lastSeen: u.lastSeen, banned: !!u.banned, admin: !!u.isAdmin })),
+        });
+      },
+      'admin:ban'({ me, uid }, { user, on }, cb) {
+        const u = this.users[user];
+        if (!me.isAdmin || !u || u.isAdmin || user === uid) return cb({ error: 'Not allowed' });
+        u.banned = !!on;
+        if (on) { for (const [k, v] of Object.entries(this.sessions)) if (v === user) delete this.sessions[k]; for (const [ws, x] of this.socks) if (x === user) try { ws.close(4001, 'auth'); } catch {} }
+        this.save();
+        cb({ ok: true });
+      },
+      'admin:dismiss'({ me }, { id: rid }, cb) {
+        if (!me.isAdmin) return cb({ error: 'Admins only' });
+        delete this.reports[rid]; this.save(); cb({ ok: true });
+      },
+      async 'admin:snapshot'({ me }, _d, cb) {
+        if (!me.isAdmin) return cb({ error: 'Admins only' });
+        if (!this.env.BACKUPS) return cb({ error: 'Backup storage is not connected' });
+        cb({ ok: true, name: await this.takeSnapshot() });
+      },
       'users:lookup'({ ws, uid }, { ids }) {
         const allowed = new Set(this.allMemberIds(uid));
-        this.send(ws, 'users', this.pubUsers((ids || []).filter((i) => allowed.has(i))));
+        this.send(ws, 'users', this.pubUsers((ids || []).filter((i) => allowed.has(i)), uid));
       },
     };
   }

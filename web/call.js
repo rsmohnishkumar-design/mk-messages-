@@ -1,6 +1,12 @@
 // ---------- voice / video calls (WebRTC; signaling over the chat socket) ----------
 const ICE={iceServers:[{urls:['stun:stun.cloudflare.com:3478','stun:stun.l.google.com:19302']}]};
-let ringT=null,ringChat=null,ringOff=null,callTimer=null;
+let ringT=null,ringChat=null,ringOff=null,callTimer=null,iceCfg=null;
+// ICE servers: STUN always, plus the call relay (TURN) when the backend has one, so calls connect on strict networks
+async function getIce(){
+ if(iceCfg&&iceCfg.exp>Date.now())return iceCfg.v;
+ try{const r=await fetch(API+'/api/ice',{headers:{Authorization:'Bearer '+token}}),d=await r.json();if(Array.isArray(d.iceServers)){iceCfg={v:{iceServers:d.iceServers},exp:Date.now()+30*60e3};return iceCfg.v}}catch{}
+ return ICE;
+}
 function renderBanner(){
  const b=$('#callBanner'),st=cur&&callState[cur];
  if(!st||call){b.classList.add('hidden');return}
@@ -51,7 +57,7 @@ async function joinCall(chat,video){
  let local;
  try{local=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:video?{facingMode:'user'}:false})}
  catch{toast(video?'Allow camera and microphone to start a video call':'Allow the microphone to start a call');return}
- call={chat,video,local,peers:{},muted:false,camOff:false,facing:'user',t0:Date.now()};
+ call={chat,video,local,peers:{},muted:false,camOff:false,facing:'user',t0:Date.now(),ice:await getIce()};
  showCallUI();
  emit('call:join',{chat,video},d=>{
   if(!d||d.error){toast(d&&d.error||'Could not join the call');endCallLocal();return}
@@ -60,7 +66,7 @@ async function joinCall(chat,video){
 }
 function makePeer(uid,initiator){
  if(call.peers[uid])return call.peers[uid];
- const pc=new RTCPeerConnection(ICE),peer={pc,stream:new MediaStream(),pending:[],cam:true,mic:true};
+ const pc=new RTCPeerConnection(call.ice||ICE),peer={pc,stream:new MediaStream(),pending:[],cam:true,mic:true};
  call.peers[uid]=peer;
  call.local.getTracks().forEach(t=>pc.addTrack(t,call.local));
  pc.ontrack=e=>{if(e.streams[0])peer.stream=e.streams[0];else peer.stream.addTrack(e.track);renderTiles()};

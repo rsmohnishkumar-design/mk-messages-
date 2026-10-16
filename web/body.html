@@ -38,9 +38,11 @@
    </div>
    <div id="msgSearchBar" class="top hidden"><input type="text" id="msgSearch" placeholder="Search messages"></div>
    <div id="callBanner" class="hidden"></div>
+   <div id="announce" class="hidden"></div>
    <div id="msgs"></div>
    <div id="typing"></div>
    <div id="replybar" class="hidden"><div class="grow" id="replyText"></div><button class="ib" id="replyX" data-i="x" data-s="18" aria-label="Cancel reply"></button></div>
+   <div id="ment" class="hidden"></div>
    <div id="panel" class="hidden"></div>
    <div id="composer">
     <button class="ib" id="btnEmoji" data-i="smile" aria-label="Emoji, stickers and labels"></button>
@@ -76,6 +78,18 @@
  <video id="arVid" autoplay playsinline muted></video><div id="arLayer"></div><div id="arCross"></div>
  <div id="arTop"><button class="ib" id="arClose" data-i="x" aria-label="Close"></button><div class="grow"><b id="arTitle"></b><div id="arStat" style="font-size:12px;opacity:.85"></div></div></div>
  <div id="arBot"><button class="btn" id="arPlace">Pin a note</button><button class="btn sec" id="arList" style="background:#fff">Notes</button></div>
+</div>
+<div id="lb" class="hidden">
+ <div class="lbtop"><span id="lbCap"></span><span style="flex:1"></span><a id="lbDl" class="ib" download aria-label="Download" data-i="download" style="color:#fff"></a><button class="ib" id="lbX" data-i="x" aria-label="Close" style="color:#fff"></button></div>
+ <button class="ib lbnav" id="lbPrev" data-i="back" data-s="28" aria-label="Previous"></button>
+ <div id="lbBody"></div>
+ <button class="ib lbnav r" id="lbNext" data-i="forward" data-s="28" aria-label="Next"></button>
+</div>
+<div id="lock" class="hidden">
+ <div class="card" style="text-align:center"><h1>MK Messages</h1><p id="lockMsg">Enter your PIN to unlock</p>
+  <input type="password" id="lockPin" inputmode="numeric" maxlength="8" autocomplete="off" style="text-align:center;font-size:24px;letter-spacing:6px">
+  <div class="err" id="lockErr"></div><button class="btn" id="lockGo" style="width:100%">Unlock</button>
+  <p style="margin-top:12px"><button class="link" id="lockOut">Forgot PIN? Log out</button></p></div>
 </div>
 <div id="ov" class="hidden"><div class="modal" id="modal"></div></div>
 <div id="toast" class="hidden"></div>
