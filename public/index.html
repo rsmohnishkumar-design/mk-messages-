@@ -139,10 +139,7 @@ input[type=text],input[type=password],textarea{width:100%;padding:10px 12px;bord
    <div id="typing"></div>
    <div id="replybar" class="hidden"><div class="grow" id="replyText"></div><button class="ib" id="replyX">✕</button></div>
    <div id="composer">
-    <button class="ib" id="btnAttach" title="Attach">📎</button>
-    <input type="file" id="file" class="hidden">
     <textarea id="input" rows="1" placeholder="Type a message"></textarea>
-    <button class="ib" id="btnMic" title="Voice note">🎤</button>
     <button class="ib" id="btnSend" title="Send" style="color:var(--accent)">➤</button>
    </div>
   </div>
@@ -370,34 +367,6 @@ function sendText(){
  inp.value='';autosize();reply=null;renderReply();
  clearTimeout(typingT);if(typingOn){typingOn=false;emit('typing',{chat:cur,typing:false})}
 }
-async function upload(blob,name,type){
- try{
-  const r=await fetch('/api/upload',{method:'POST',headers:{Authorization:'Bearer '+token,'X-Filename':encodeURIComponent(name),'X-Mime':type||'application/octet-stream'},body:blob});
-  const d=await r.json().catch(()=>({error:'Upload failed'}));
-  if(!r.ok||d.error){toast(d.error||'Upload failed');return null}
-  return d;
- }catch{toast('Upload failed');return null}
-}
-async function sendFile(blob,name,type){
- if(!cur)return;toast('Uploading…');
- const f=await upload(blob,name,type);if(!f)return;
- emit('message:send',{chat:cur,text:'',file:f,replyTo:reply&&reply.id},d=>{if(d&&d.error)toast(d.error)});
- reply=null;renderReply();$('#toast').classList.add('hidden');
-}
-$('#btnAttach').onclick=()=>$('#file').click();
-$('#file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)sendFile(f,f.name,f.type)};
-let rec=null,chunks=[];
-$('#btnMic').onclick=async()=>{
- if(rec){rec.stop();return}
- try{
-  const s=await navigator.mediaDevices.getUserMedia({audio:true});
-  rec=new MediaRecorder(s);chunks=[];
-  rec.ondataavailable=e=>chunks.push(e.data);
-  rec.onstop=()=>{s.getTracks().forEach(t=>t.stop());const b=new Blob(chunks,{type:rec.mimeType||'audio/webm'});rec=null;$('#btnMic').textContent='🎤';sendFile(b,'voice-note.'+(b.type.includes('mp4')?'m4a':'webm'),b.type)};
-  rec.start();$('#btnMic').textContent='⏹';toast('Recording… tap ⏹ to send');
- }catch{toast('Microphone not available')}
-};
-
 // ---------- modals ----------
 function modal(html){$('#modal').innerHTML=html;$('#ov').classList.remove('hidden')}
 function closeModal(){$('#ov').classList.add('hidden');$('#modal').innerHTML=''}
