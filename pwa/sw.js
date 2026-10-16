@@ -1,6 +1,6 @@
 // MK Messages service worker: caches the app shell so it opens instantly and
 // offline; chat traffic (other origins / WebSocket) is never touched.
-const CACHE = 'mk-shell-v1';
+const CACHE = 'mk-shell-v2';
 const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -43,7 +43,7 @@ input[type=text],input[type=password],textarea{width:100%;padding:10px 12px;bord
 .av{width:42px;height:42px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;background-size:cover;background-position:center;position:relative}
 .av.sm{width:30px;height:30px;font-size:13px}
 .dot{position:absolute;right:0;bottom:0;width:11px;height:11px;border-radius:50%;background:#25d366;border:2px solid var(--panel)}
-#search{margin:8px 12px}
+#search{margin:8px 12px;width:calc(100% - 24px)}
 #chatlist{flex:1;overflow-y:auto;min-height:0}
 .ci{display:flex;gap:12px;padding:10px 14px;align-items:center;cursor:pointer;border-bottom:1px solid var(--line)}
 .ci:hover,.ci.sel{background:var(--hover)}
@@ -87,14 +87,14 @@ input[type=text],input[type=password],textarea{width:100%;padding:10px 12px;bord
 .menu button:hover{background:var(--hover)}
 .menu .emo{display:flex;padding:6px 10px;gap:4px}
 .menu .emo button{width:auto;padding:2px 5px;font-size:20px}
-#ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:80;padding:16px}
 .modal{background:var(--panel);border-radius:12px;padding:20px;width:100%;max-width:400px;max-height:90%;overflow:auto}
 .modal h3{margin:0 0 12px}
 .modal .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
 .mem{display:flex;align-items:center;gap:10px;padding:6px 0}
 .mem .grow{flex:1}
 .num{font-size:28px;letter-spacing:4px;font-weight:700;color:var(--accent);text-align:center;margin:8px 0}
-#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#323232;color:#fff;padding:9px 16px;border-radius:8px;z-index:90}
+#toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:#323232;color:#fff;padding:9px 16px;border-radius:8px;z-index:90}
 .back{display:none}
 @media(max-width:760px){
  #side{width:100%}
@@ -104,6 +104,48 @@ input[type=text],input[type=password],textarea{width:100%;padding:10px 12px;bord
  #msgs{padding:10px 8px}
  .b{max-width:88%}
 }
+#panel{background:var(--panel);border-top:1px solid var(--line);padding:6px 10px;max-height:250px;overflow:auto}
+#panel .tabs{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+#panel .tabs button{background:none;border:0;padding:4px 9px;border-radius:12px;font-size:18px}
+#panel .tabs button.on{background:var(--hover);outline:1px solid var(--line)}
+#panel .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr))}
+#panel .grid button{background:none;border:0;font-size:24px;padding:4px;border-radius:8px}
+#panel .grid button:hover{background:var(--hover)}
+#panel .gifs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+#panel .gifs img{width:100%;height:90px;object-fit:cover;border-radius:6px;cursor:pointer}
+#callBanner{background:var(--accent);color:#fff;padding:8px 14px;display:flex;align-items:center;gap:10px}
+#callBanner span{flex:1}
+#callBanner button{background:#fff;color:var(--accent);border:0;border-radius:14px;padding:4px 14px;font-weight:700}
+.b .voice{display:flex;align-items:center;gap:6px}
+.b .voice audio{height:36px;width:230px;max-width:100%}
+#call{position:fixed;inset:0;background:#0b0f14;color:#fff;z-index:70;display:flex;flex-direction:column}
+#call .ctop{padding:10px 14px;display:flex;align-items:center;gap:10px}
+#call .ctop .grow{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#tiles{flex:1;display:grid;gap:6px;padding:6px;min-height:0;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));grid-auto-rows:minmax(0,1fr)}
+.tile{position:relative;background:#1b2430;border-radius:12px;overflow:hidden;min-height:120px}
+.tile video{width:100%;height:100%;object-fit:cover;background:#000;display:block}
+.tile.mirror video{transform:scaleX(-1)}
+.tile .noV{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#1b2430}
+.tile .noV .av{width:84px;height:84px;font-size:34px}
+.tile .nm{position:absolute;left:8px;bottom:6px;background:rgba(0,0,0,.55);padding:2px 9px;border-radius:10px;font-size:13px}
+.tile .al{position:absolute;inset:0;pointer-events:none}
+.noteMode .tile{cursor:crosshair;outline:2px dashed #ffe27a}
+.annot{position:absolute;transform:translate(-50%,-100%);background:#ffe27a;color:#222;padding:5px 9px;border-radius:6px;font-size:13px;max-width:70%;box-shadow:0 3px 10px rgba(0,0,0,.45)}
+.annot::after{content:"";position:absolute;left:50%;bottom:-6px;margin-left:-6px;border:6px solid transparent;border-top-color:#ffe27a;border-bottom:0}
+#ctrls{display:flex;gap:12px;justify-content:center;padding:12px;flex-wrap:wrap}
+#ctrls button{width:52px;height:52px;border-radius:50%;border:0;font-size:22px;background:#2a3544;color:#fff}
+#ctrls button.off{background:#fff;color:#111}
+#ctrls button.end{background:#e53935;color:#fff}
+#ar{position:fixed;inset:0;z-index:75;background:#000;color:#fff;overflow:hidden}
+#ar video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#arLayer{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.arn{position:absolute;left:0;top:0;background:rgba(255,226,122,.96);color:#222;padding:8px 10px;border-radius:8px;max-width:220px;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.5);pointer-events:auto;will-change:transform}
+.arn small{display:block;color:#555;font-size:11px;margin-top:2px}
+#arTop{position:absolute;top:0;left:0;right:0;padding:10px;display:flex;gap:8px;align-items:center;background:linear-gradient(#000b,#0000)}
+#arTop .grow{flex:1;min-width:0}
+#arBot{position:absolute;bottom:0;left:0;right:0;padding:16px;display:flex;gap:10px;justify-content:center;background:linear-gradient(#0000,#000b)}
+#arCross{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border:2px solid rgba(255,255,255,.8);border-radius:50%;pointer-events:none}
+#ar .btn{box-shadow:0 2px 8px rgba(0,0,0,.4)}
 </style>
 </head>
 <body>
@@ -112,14 +154,13 @@ input[type=text],input[type=password],textarea{width:100%;padding:10px 12px;bord
  <form class="card" id="authForm" autocomplete="on">
   <h1>MK Messages</h1>
   <p id="authSub">Sign in to continue</p>
-  <div id="nameWrap" class="hidden"><label for="aName">Your name</label><input type="text" id="aName" autocomplete="name"></div>
-  <label for="aUser">Username</label><input type="text" id="aUser" autocomplete="username" autocapitalize="none">
+  <label for="aUser">Username <span style="opacity:.7">(any name you like)</span></label><input type="text" id="aUser" autocomplete="username" maxlength="30">
   <label for="aPass">Password</label><input type="password" id="aPass" autocomplete="current-password">
   <label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="showPw"> Show password</label>
   <div class="err" id="authErr"></div>
   <button class="btn" id="authBtn" style="width:100%">Sign in</button>
   <p style="margin:14px 0 0;text-align:center"><button type="button" class="link" id="authSwitch">New here? Create an account</button></p>
-  <p style="font-size:12px;margin-top:10px">The first account created becomes the Admin and can create groups.</p>
+  <p style="font-size:12px;margin-top:10px">Pick any username — it is also your display name. Anyone can create a group and becomes that group's admin.</p>
  </form>
 </div>
 
@@ -143,21 +184,39 @@ input[type=text],input[type=password],textarea{width:100%;padding:10px 12px;bord
     <button class="ib back" id="btnBack">←</button>
     <div class="av" id="hAv"></div>
     <div class="grow" id="hInfo" style="cursor:pointer"><b id="hName"></b><div id="hSub" style="font-size:12px;color:var(--sub)"></div></div>
+    <button class="ib" id="btnCallA" title="Voice call">📞</button>
+    <button class="ib" id="btnCallV" title="Video call">🎥</button>
     <button class="ib" id="btnMsgSearch" title="Search in chat">🔍</button>
     <button class="ib" id="btnMore" title="More">⋮</button>
    </div>
    <div id="msgSearchBar" class="top hidden"><input type="text" id="msgSearch" placeholder="Search messages"></div>
+   <div id="callBanner" class="hidden"></div>
    <div id="msgs"></div>
    <div id="typing"></div>
    <div id="replybar" class="hidden"><div class="grow" id="replyText"></div><button class="ib" id="replyX">✕</button></div>
+   <div id="panel" class="hidden"></div>
    <div id="composer">
+    <button class="ib" id="btnEmoji" title="Emoji &amp; GIFs">😊</button>
+    <button class="ib" id="btnAttach" title="Attach">📎</button>
+    <input type="file" id="file" class="hidden">
     <textarea id="input" rows="1" placeholder="Type a message"></textarea>
+    <button class="ib" id="btnMic" title="Voice note">🎤</button>
     <button class="ib" id="btnSend" title="Send" style="color:var(--accent)">➤</button>
    </div>
   </div>
  </div>
 </div>
 
+<div id="call" class="hidden">
+ <div class="ctop"><div class="grow"><b id="callTitle"></b></div><span id="callTime">0:00</span></div>
+ <div id="tiles"></div>
+ <div id="ctrls"><button id="cMic" title="Mute">🎤</button><button id="cCam" title="Camera">📷</button><button id="cFlip" title="Switch camera">🔄</button><button id="cNote" title="Pin a note on the video">📌</button><button id="cEnd" class="end" title="Hang up">📵</button></div>
+</div>
+<div id="ar" class="hidden">
+ <video id="arVid" autoplay playsinline muted></video><div id="arLayer"></div><div id="arCross"></div>
+ <div id="arTop"><button class="ib" id="arClose" style="color:#fff">✕</button><div class="grow"><b id="arTitle"></b><div id="arStat" style="font-size:12px;opacity:.85"></div></div></div>
+ <div id="arBot"><button class="btn" id="arPlace">📌 Pin a note</button><button class="btn sec" id="arList" style="background:#fff">📋 Notes</button></div>
+</div>
 <div id="ov" class="hidden"><div class="modal" id="modal"></div></div>
 <div id="toast" class="hidden"></div>
 
@@ -169,6 +228,8 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const store={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}},del(k){try{localStorage.removeItem(k)}catch{}}};
 
 const API='https://mk-messages.scratch-2026-10-06-1022eb.workers.dev';
+let init1=false;
+const U=u=>String(u||'').startsWith('/')?API+u:u;
 let token=store.get('mk_token'),me=null,chats=[],users={},cur=null,msgs={},typers={},ws=null,acks={},ackN=0,reply=null,regMode=false,retry=0,filter='',msgFilter='';
 
 // theme
@@ -176,17 +237,17 @@ const applyTheme=t=>document.documentElement.setAttribute('data-theme',t);
 applyTheme(store.get('mk_theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'));
 $('#btnTheme').onclick=()=>{const t=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';applyTheme(t);store.set('mk_theme',t)};
 
-function toast(t){const e=$('#toast');e.textContent=t;e.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.add('hidden'),2800)}
+function toast(t,ms){const e=$('#toast');e.textContent=t;e.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.add('hidden'),ms||2800)}
 function beep(){try{const c=new (window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.setValueAtTime(.08,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.25);o.start();o.stop(c.currentTime+.25)}catch{}}
 
 // ---------- auth ----------
 $('#showPw').onchange=e=>{$('#aPass').type=e.target.checked?'text':'password'};
-$('#authSwitch').onclick=()=>{regMode=!regMode;$('#nameWrap').classList.toggle('hidden',!regMode);$('#authBtn').textContent=regMode?'Create account':'Sign in';$('#authSub').textContent=regMode?'Create your account':'Sign in to continue';$('#authSwitch').textContent=regMode?'Have an account? Sign in':'New here? Create an account';$('#authErr').textContent=''};
+$('#authSwitch').onclick=()=>{regMode=!regMode;$('#authBtn').textContent=regMode?'Create account':'Sign in';$('#authSub').textContent=regMode?'Create your account':'Sign in to continue';$('#authSwitch').textContent=regMode?'Have an account? Sign in':'New here? Create an account';$('#authErr').textContent=''};
 $('#authForm').onsubmit=async e=>{
  e.preventDefault();
  $('#authErr').textContent='';$('#authBtn').disabled=true;
  try{
-  const r=await fetch(API+(regMode?'/api/register':'/api/login'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('#aUser').value,password:$('#aPass').value,name:$('#aName').value})});
+  const r=await fetch(API+(regMode?'/api/register':'/api/login'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('#aUser').value,password:$('#aPass').value})});
   const d=await r.json().catch(()=>({error:'Server error'}));
   if(!r.ok||d.error){$('#authErr').textContent=d.error||'Failed';return}
   token=d.token;store.set('mk_token',token);start();
@@ -214,7 +275,7 @@ function emit(ev,data,cb){
 function onEv(ev,d){
  if(ev.startsWith('ack:')){const f=acks[ev];delete acks[ev];f&&f(d);return}
  switch(ev){
-  case 'init':me=d.me;chats=d.chats;d.users.forEach(u=>users[u.id]=u);users[me.id]=me;renderMe();renderList();if(cur&&chats.find(c=>c.id===cur))openChat(cur,true);break;
+  case 'init':callState=d.calls||{};me=d.me;chats=d.chats;d.users.forEach(u=>users[u.id]=u);users[me.id]=me;renderMe();renderList();if(cur&&chats.find(c=>c.id===cur))openChat(cur,true);if(!init1){init1=true;setTimeout(nearbyCheck,1500)}break;
   case 'chats':chats=d;renderList();if(cur){if(!chats.find(c=>c.id===cur)){closeChat()}else renderHeader()}break;
   case 'users':d.forEach(u=>users[u.id]=u);if(d.find(u=>u.id===me.id))me=users[me.id];renderMe();renderList();if(cur)renderHeader();renderMsgs(true);break;
   case 'presence':if(users[d.id]){users[d.id].online=d.online;if(d.lastSeen)users[d.id].lastSeen=d.lastSeen;renderList();if(cur)renderHeader()}break;
@@ -227,6 +288,14 @@ function onEv(ev,d){
   case 'message:remove':{const l=msgs[d.chat];if(l){msgs[d.chat]=l.filter(x=>x.id!==d.id);if(d.chat===cur)renderMsgs(true)}break}
   case 'chat:read':{const l=msgs[d.chat];if(l){l.forEach(m=>{if(!m.readBy.includes(d.user))m.readBy.push(d.user)});if(d.chat===cur)renderMsgs(true)}break}
   case 'chat:deleted':delete msgs[d];if(cur===d)closeChat();break;
+  case 'call:state':if(d.call)callState[d.chat]=d.call;else delete callState[d.chat];renderBanner();break;
+  case 'call:ring':ringModal(d.chat,d.from,d.video);break;
+  case 'call:signal':onSignal(d);break;
+  case 'call:left':if(call&&call.chat===d.chat)dropPeer(d.user);break;
+  case 'call:annot':if(call&&call.chat===d.chat)addAnnot(d.target,d.x,d.y,d.text,(users[d.from]||{}).name||'Someone',d.aid);break;
+  case 'pin':if(ar&&ar.chat===d.chat&&!ar.pins.find(x=>x.id===d.id))ar.pins.push(d);if(d.from!==me.id)toast('📍 New AR note from '+((users[d.from]||{}).name||'someone'));break;
+  case 'pin:removed':if(ar)ar.pins=ar.pins.filter(x=>x.id!==d.id);break;
+  case 'schedule:done':toast(d.error?'Scheduled message failed: '+d.error:'⏰ Scheduled message sent');break;
   case 'typing':{
    const k=d.chat+':'+d.user;clearTimeout(typers[k]);
    if(d.typing){typers[k]=setTimeout(()=>{delete typers[k];renderTyping()},4000);typers[k+'n']=d.name}else delete typers[k];
@@ -262,7 +331,7 @@ $('#search').oninput=e=>{filter=e.target.value;renderList()};
 function openChat(id,keep){
  cur=id;reply=null;msgFilter='';$('#msgSearch').value='';$('#msgSearchBar').classList.add('hidden');
  $('#app').classList.add('chat');$('#placeholder').classList.add('hidden');$('#chatpane').classList.remove('hidden');
- renderHeader();renderReply();renderList();
+ renderHeader();renderReply();renderList();closePanel();renderBanner();
  emit('chat:history',{chat:id},d=>{
   if(cur!==id)return;
   if(d.error){toast(d.error);return}
@@ -270,14 +339,14 @@ function openChat(id,keep){
  });
  if(!keep&&matchMedia('(min-width:761px)').matches)$('#input').focus();
 }
-function closeChat(){cur=null;$('#app').classList.remove('chat');$('#chatpane').classList.add('hidden');$('#placeholder').classList.remove('hidden');renderList()}
+function closeChat(){cur=null;closePanel();renderBanner();$('#app').classList.remove('chat');$('#chatpane').classList.add('hidden');$('#placeholder').classList.remove('hidden');renderList()}
 $('#btnBack').onclick=closeChat;
 function renderHeader(){
  const c=chatById(cur);if(!c)return;
  const av=c.type==='group'?avHtml(c.name):avHtml(other(c).name,other(c).avatar,other(c).online);
  $('#hAv').outerHTML=av.replace('class="av ','id="hAv" class="av ');
  $('#hName').textContent=title(c);
- $('#hSub').dataset.base=c.type==='group'?c.members.length+' members'+(c.onlyAdminPosts?' · only admin can post':''):lastSeen(other(c));
+ $('#hSub').dataset.base=c.type==='group'?c.members.length+' members · '+c.members.filter(id=>(users[id]||{}).online).length+' online'+(c.onlyAdminPosts?' · only admin can post':''):lastSeen(other(c));
  renderTyping();
 }
 function renderTyping(){
@@ -294,11 +363,16 @@ function ticks(m,c){
 }
 function fileHtml(f){
  if(!f||!f.url)return '';
- const u=esc(f.url),t=f.type||'';
- if(t.startsWith('image/'))return `<a href="${u}" target="_blank"><img src="${u}" alt="${esc(f.name)}"></a>`;
- if(t.startsWith('video/'))return `<video src="${u}" controls></video>`;
- if(t.startsWith('audio/'))return `<audio src="${u}" controls></audio>`;
- return `<a href="${u}" target="_blank" download="${esc(f.name)}">📎 ${esc(f.name)} (${Math.max(1,Math.round(f.size/1024))} KB)</a>`;
+ const u=esc(U(f.url)),t=f.type||'';
+ if(t.startsWith('image/'))return `<a href="${u}" target="_blank" rel="noopener"><img src="${u}" alt="${esc(f.name)}"></a>`;
+ if(t.startsWith('video/'))return `<video src="${u}" controls playsinline preload="metadata"></video>`;
+ if(t.startsWith('audio/'))return `<div class="voice">🎙<audio src="${u}" controls preload="metadata"></audio></div>`;
+ return `<a href="${u}" target="_blank" rel="noopener" download="${esc(f.name)}">📎 ${esc(f.name)} (${Math.max(1,Math.round(f.size/1024))} KB)</a>`;
+}
+function textHtml(t){
+ const s=t.trim();
+ if(!/\s/.test(s)&&/^https:\/\/(media\d*\.giphy\.com|i\.giphy\.com|media\.tenor\.com|c\.tenor\.com)\//i.test(s))return `<img src="${esc(s)}" alt="GIF">`;
+ return `<div class="txt">${linkify(t)}</div>`;
 }
 function renderMsgs(keepPos){
  const c=chatById(cur),box=$('#msgs');if(!c)return;
@@ -314,7 +388,7 @@ function renderMsgs(keepPos){
   if(m.forwarded)h+='<div class="fwd">↪ Forwarded</div>';
   if(m.replyTo)h+=`<div class="quote"><b>${esc((users[m.replyTo.from]||{}).name||'')}</b><br>${esc(m.replyTo.text)}</div>`;
   if(m.deleted)h+='<div class="del">🚫 This message was deleted</div>';
-  else{h+=fileHtml(m.file);if(m.text)h+=`<div class="txt">${linkify(m.text)}</div>`}
+  else{h+=fileHtml(m.file);if(m.text)h+=textHtml(m.text)}
   const rc=Object.entries(m.reactions||{}).map(([e,a])=>`<span>${esc(e)}${a.length>1?' '+a.length:''}</span>`).join('');
   if(rc)h+=`<div class="react">${rc}</div>`;
   h+=`<div class="meta">${(m.starredBy||[]).includes(me.id)?'⭐ ':''}${m.edited?'edited · ':''}${fmtTime(m.ts)} ${ticks(m,c)}</div>`;
@@ -346,7 +420,7 @@ function popMenu(html,rect){
  closeMenu();
  const m=document.createElement('div');m.className='menu';m.id='menu';m.innerHTML=html;document.body.appendChild(m);
  const w=m.offsetWidth,h=m.offsetHeight;
- const x=rect.pt?rect.left-w/2:rect.left-w+30,y=rect.pt?rect.top-h/2:rect.bottom;
+ const x=rect.pt?rect.left-w/2:rect.up?rect.left:rect.left-w+30,y=rect.up?rect.top-h-6:rect.pt?rect.top-h/2:rect.bottom;
  m.style.left=Math.max(8,Math.min(x,innerWidth-w-8))+'px';
  m.style.top=Math.max(8,Math.min(y,innerHeight-h-8))+'px';
  menuAt=Date.now();
@@ -357,7 +431,7 @@ function closeMenu(){const m=$('#menu');if(m)m.remove()}
 document.addEventListener('click',e=>{if(Date.now()-menuAt<500)return;if(!e.target.closest('.menu')&&!e.target.closest('[data-act=menu]')&&e.target.id!=='btnMore')closeMenu()});
 function msgMenu(mid,rect){
  const c=chatById(cur),m=(msgs[cur]||[]).find(x=>x.id===mid);if(!m||m.deleted)return;
- const mine=m.from===me.id,canAll=mine||c.admin===me.id||me.isAdmin;
+ const mine=m.from===me.id,canAll=mine||c.admin===me.id;
  const emo=['👍','❤️','😂','😮','😢','🙏'].map(x=>`<button data-r="${x}">${x}</button>`).join('');
  const el=popMenu(`<div class="emo">${emo}</div><button data-a="reply">↩ Reply</button>${m.text?'<button data-a="copy">⧉ Copy</button>':''}<button data-a="star">${(m.starredBy||[]).includes(me.id)?'☆ Unstar':'⭐ Star'}</button><button data-a="fwd">↪ Forward</button>${mine&&m.text?'<button data-a="edit">✎ Edit</button>':''}<button data-a="delme">🗑 Delete for me</button>${canAll?'<button data-a="delall">🗑 Delete for everyone</button>':''}`,rect);
  el.onclick=ev=>{
@@ -401,7 +475,7 @@ function sendText(){
 }
 // ---------- modals ----------
 function modal(html){$('#modal').innerHTML=html;$('#ov').classList.remove('hidden')}
-function closeModal(){$('#ov').classList.add('hidden');$('#modal').innerHTML=''}
+function closeModal(){stopRing();$('#ov').classList.add('hidden');$('#modal').innerHTML=''}
 $('#ov').onclick=e=>{if(e.target.id==='ov')closeModal()};
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeMenu()}});
 function bindModal(map){Object.entries(map).forEach(([id,fn])=>{const el=$('#modal #'+id);if(el)el.onclick=fn})}
@@ -409,8 +483,8 @@ function bindModal(map){Object.entries(map).forEach(([id,fn])=>{const el=$('#mod
 $('#btnNew').onclick=()=>{
  modal(`<h3>Join a group</h3><input type="text" id="gNum" inputmode="numeric" maxlength="6" placeholder="6-digit group number"><div class="err" id="mErr"></div>
  <div class="acts"><button class="btn sec" id="mCancel">Cancel</button><button class="btn" id="gJoin">Join</button></div>
- ${me.isAdmin?`<hr style="border:0;border-top:1px solid var(--line);margin:16px 0"><h3>Create a group <small style="color:var(--sub)">(admin)</small></h3><input type="text" id="gName" placeholder="Group name" maxlength="40" style="margin-bottom:8px"><input type="text" id="gDesc" placeholder="Description (optional)" maxlength="200"><label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="gOnly"> Only admin can post</label><div class="acts"><button class="btn" id="gCreate">Create group</button></div>`:''}
- <hr style="border:0;border-top:1px solid var(--line);margin:16px 0"><h3>Direct message</h3><input type="text" id="dUser" placeholder="Their username" autocapitalize="none"><div class="acts"><button class="btn sec" id="dOpen">Open chat</button></div>`);
+ <hr style="border:0;border-top:1px solid var(--line);margin:16px 0"><h3>Create a group</h3><p style="color:var(--sub);font-size:13px;margin:0 0 8px">You become the admin of any group you create.</p><input type="text" id="gName" placeholder="Group name" maxlength="40" style="margin-bottom:8px"><input type="text" id="gDesc" placeholder="Description (optional)" maxlength="200"><label style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="gOnly"> Only I (admin) can post</label><div class="acts"><button class="btn" id="gCreate">Create group</button></div>
+ <hr style="border:0;border-top:1px solid var(--line);margin:16px 0"><h3>Direct message</h3><input type="text" id="dUser" placeholder="Their username"><div class="acts"><button class="btn sec" id="dOpen">Open chat</button></div>`);
  const join=()=>emit('group:join',{number:$('#gNum').value},d=>{if(d.error){$('#mErr').textContent=d.error;return}closeModal();openChat(d.chat.id)});
  $('#gNum').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();join()}});
  bindModal({mCancel:closeModal,gJoin:join,
@@ -427,25 +501,25 @@ function forwardModal(m){
 
 function profileModal(){
  modal(`<h3>Your profile</h3><div style="text-align:center">${avHtml(me.name,me.avatar)}<br><button class="link" id="pPic">Change photo</button><input type="file" id="pFile" accept="image/*" class="hidden"></div>
- <label>Name</label><input type="text" id="pName" maxlength="30" value="${esc(me.name)}"><label style="margin-top:8px;display:block">About</label><input type="text" id="pAbout" maxlength="120" value="${esc(me.about)}">
- <p style="color:var(--sub);font-size:13px">@${esc(me.username)}${me.isAdmin?' · Admin':''}</p>
+ <label>Username (shown to everyone)</label><input type="text" id="pName" maxlength="30" value="${esc(me.name)}"><label style="margin-top:8px;display:block">About</label><input type="text" id="pAbout" maxlength="120" value="${esc(me.about)}">
+ <div class="err" id="mErr"></div>
  <div class="acts"><button class="btn sec" id="mCancel">Cancel</button><button class="btn" id="pSave">Save</button></div>`);
  let avatar;
  $('#pFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=c.height=128;const x=c.getContext('2d'),s=Math.min(img.width,img.height);x.drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,0,0,128,128);avatar=c.toDataURL('image/jpeg',.8);toast('Photo ready — tap Save')};img.src=URL.createObjectURL(f)};
  bindModal({mCancel:closeModal,pPic:()=>$('#pFile').click(),pSave:()=>{
   const d={name:$('#pName').value,about:$('#pAbout').value};if(avatar)d.avatar=avatar;
-  emit('profile:update',d,r=>{if(r&&r.user){me=r.user;users[me.id]=me}renderMe();renderList();closeModal()})}});
+  emit('profile:update',d,r=>{if(r&&r.error){$('#mErr').textContent=r.error;return}if(r&&r.user){me=r.user;users[me.id]=me}renderMe();renderList();closeModal()})}});
 }
 
 function infoModal(){
  const c=chatById(cur);if(!c)return;
- if(c.type==='dm'){const u=other(c);modal(`<h3>${esc(u.name)}</h3><p style="color:var(--sub)">@${esc(u.username)} · ${esc(lastSeen(u))}</p><p>${esc(u.about||'')}</p><div class="acts"><button class="btn sec" id="mCancel">Close</button></div>`);bindModal({mCancel:closeModal});return}
- const manage=c.admin===me.id||me.isAdmin;
+ if(c.type==='dm'){const u=other(c);modal(`<h3>${esc(u.name)}</h3><p style="color:var(--sub)">${esc(lastSeen(u))}</p><p>${esc(u.about||'')}</p><div class="acts"><button class="btn sec" id="mCancel">Close</button></div>`);bindModal({mCancel:closeModal});return}
+ const manage=c.admin===me.id;
  modal(`<h3>${esc(c.name)}</h3><p style="color:var(--sub)">${esc(c.description||'')}</p>
  <div style="text-align:center;color:var(--sub);font-size:13px">Group number — share it so others can join</div><div class="num">${esc(c.number)}</div>
  <div style="text-align:center"><button class="link" id="gCopy">Copy number</button>${manage?' · <button class="link" id="gRegen">New number</button>':''}</div>
- <h4>${c.members.length} members</h4>
- ${c.members.map(id=>{const u=users[id]||{name:'Unknown'};return `<div class="mem">${avHtml(u.name,u.avatar,false,'sm')}<div class="grow">${esc(u.name)}${id===c.admin?' <small style="color:var(--accent)">group admin</small>':''}</div>${manage&&id!==c.admin?`<button class="link" data-rm="${esc(id)}">Remove</button>`:''}</div>`}).join('')}
+ <h4>${c.members.length} members · ${c.members.filter(id=>(users[id]||{}).online).length} online</h4>
+ ${c.members.map(id=>{const u=users[id]||{name:'Unknown'};return `<div class="mem"${id!==me.id?` data-dm="${esc(id)}" style="cursor:pointer"`:''}>${avHtml(u.name,u.avatar,u.online,'sm')}<div class="grow">${esc(u.name)}${id===me.id?' (you)':''}${id===c.admin?' <small style="color:var(--accent)">group admin</small>':''}<br><small style="color:var(--sub)">${esc(lastSeen(u))}</small></div>${manage&&id!==c.admin?`<button class="link" data-rm="${esc(id)}">Remove</button>`:''}</div>`}).join('')}
  ${manage?`<label style="display:flex;gap:6px;align-items:center;margin-top:10px"><input type="checkbox" id="gOnly" ${c.onlyAdminPosts?'checked':''}> Only admin can post</label>`:''}
  <div class="acts"><button class="btn sec" id="gLeave">Leave</button>${manage?'<button class="btn danger" id="gDel">Delete group</button>':''}<button class="btn" id="mCancel">Close</button></div>`);
  bindModal({mCancel:closeModal,
@@ -454,18 +528,384 @@ function infoModal(){
   gLeave:()=>{if(confirm('Leave this group?'))emit('group:leave',{chat:c.id},()=>closeModal())},
   gDel:()=>{if(confirm('Delete this group for everyone?'))emit('group:delete',{chat:c.id},()=>closeModal())}});
  const o=$('#modal #gOnly');if(o)o.onchange=()=>emit('group:update',{chat:c.id,onlyAdminPosts:o.checked});
- $('#modal').onclick=e=>{const b=e.target.closest('[data-rm]');if(b&&confirm('Remove this member?'))emit('group:remove',{chat:c.id,user:b.dataset.rm},()=>closeModal())};
+ $('#modal').onclick=e=>{
+  const b=e.target.closest('[data-rm]');
+  if(b){if(confirm('Remove this member?'))emit('group:remove',{chat:c.id,user:b.dataset.rm},()=>closeModal());return}
+  const m=e.target.closest('[data-dm]');
+  if(m){const u=users[m.dataset.dm];if(u)emit('dm:open',{username:u.username},d=>{if(d.chat){closeModal();openChat(d.chat.id)}})}
+ };
 }
 $('#hInfo').onclick=infoModal;
 $('#btnMore').onclick=e=>{
  const c=chatById(cur);if(!c)return;
- const el=popMenu(`<button data-a="info">ℹ ${c.type==='group'?'Group info':'Contact info'}</button><button data-a="pin">${c.pinned?'Unpin chat':'📌 Pin chat'}</button><button data-a="mute">${c.muted?'Unmute':'🔇 Mute'}</button><button data-a="clear">Clear chat</button>`,e.target.getBoundingClientRect());
+ const el=popMenu(`<button data-a="info">ℹ ${c.type==='group'?'Group info':'Contact info'}</button><button data-a="pin">${c.pinned?'Unpin chat':'📌 Pin chat'}</button><button data-a="mute">${c.muted?'Unmute':'🔇 Mute'}</button><button data-a="ar">📍 AR notes</button><button data-a="sched">⏰ Scheduled messages</button><button data-a="clear">Clear chat</button>`,e.target.getBoundingClientRect());
  el.onclick=ev=>{const b=ev.target.closest('button');if(!b)return;closeMenu();
   if(b.dataset.a==='info')infoModal();
+  if(b.dataset.a==='ar')openAR();
+  if(b.dataset.a==='sched')scheduleModal();
   if(b.dataset.a==='pin')emit('chat:pref',{chat:cur,pinned:!c.pinned});
   if(b.dataset.a==='mute')emit('chat:pref',{chat:cur,muted:!c.muted});
   if(b.dataset.a==='clear'&&confirm('Clear all messages for you?')){emit('chat:clear',{chat:cur});msgs[cur]=[];renderMsgs()}};
 };
+
+// ---------- emoji / GIF panel ----------
+const GIPHY_KEY='';  // optional: put a free GIPHY API key here to enable GIF search
+const EMOJI={
+ '😀':'😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🤐 😐 😑 😶 😏 😒 🙄 😬 😮‍💨 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🥵 🥶 🥴 😵 🤯 🤠 🥳 😎 🤓 🧐 😕 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 💩 🤡 👻 👽 🤖',
+ '👍':'👍 👎 👌 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ ✋ 🤚 🖐 🖖 👋 🤝 🙏 💪 👏 🙌 👐 🤲 ✍️ 💅 🫶 🫡 🤌 👀 👅 👄 🧠',
+ '❤️':'❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 ♥️ 😻 💋 💯 💢 💥 💫 💦 💨 🔥 ✨ ⭐ 🌟 🎉 🎊 🎈 🎁',
+ '🐶':'🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🙈 🙉 🙊 🐔 🐧 🐦 🦆 🦉 🐺 🐴 🦄 🐝 🦋 🐌 🐞 🐢 🐍 🐙 🐬 🐳 🦈 🌸 🌹 🌻 🌲 🌴 🍀 🌍 ☀️ 🌙 ⛅ 🌧 ⚡ ❄️ 🌈',
+ '🍔':'🍏 🍎 🍌 🍉 🍇 🍓 🍑 🍍 🥭 🥑 🍅 🥕 🌽 🥔 🍞 🧀 🍳 🥞 🥓 🍗 🍔 🍟 🍕 🌭 🌮 🌯 🍝 🍜 🍣 🍤 🍦 🍩 🍪 🎂 🍰 🍫 🍬 ☕ 🍵 🥤 🍺 🍷 🥂',
+ '⚽':'⚽ 🏀 🏈 ⚾ 🎾 🏐 🏉 🎱 🏓 🏸 🥊 🎮 🎲 🎯 🎵 🎶 🎤 🎧 🎸 🎹 🚗 🚕 🚌 🏍 ✈️ 🚀 🏠 🏝 📱 💻 📷 📺 💡 🔑 🔒 📌 📍 ⏰ 💰 💊 🧸 🏆'
+};
+let panelTab=null;
+function insertAtCursor(t){const s=inp.selectionStart??inp.value.length,e=inp.selectionEnd??inp.value.length;inp.value=inp.value.slice(0,s)+t+inp.value.slice(e);inp.selectionStart=inp.selectionEnd=s+t.length;inp.focus();autosize()}
+function closePanel(){panelTab=null;$('#panel').classList.add('hidden')}
+function openPanel(tab){
+ const p=$('#panel');
+ if(panelTab===tab){closePanel();return}
+ panelTab=tab;p.classList.remove('hidden');
+ const tabs=`<div class="tabs"><button data-t="emoji" class="${tab==='emoji'?'on':''}">😊</button><button data-t="gif" class="${tab==='gif'?'on':''}">GIF</button></div>`;
+ if(tab==='emoji'){
+  const cur=panelEmoji||Object.keys(EMOJI)[0];
+  p.innerHTML=tabs+`<div class="tabs">${Object.keys(EMOJI).map(k=>`<button data-c="${k}" class="${k===cur?'on':''}">${k}</button>`).join('')}</div><div class="grid">${EMOJI[cur].split(' ').map(e=>`<button data-e="${e}">${e}</button>`).join('')}</div>`;
+ }else{
+  p.innerHTML=tabs+(GIPHY_KEY?`<input type="text" id="gifQ" placeholder="Search GIFs"><div class="gifs" id="gifs" style="margin-top:6px"></div>`:
+   `<p style="color:var(--sub);font-size:13px;margin:4px 0">GIF search needs a free GIPHY key (not set up yet). You can still send any GIF from your device, or paste a GIPHY/Tenor GIF link in the chat.</p><button class="btn" id="gifPick">Choose a GIF from device</button>`);
+  if(GIPHY_KEY){const q=$('#gifQ');let t;const load=async()=>{try{const r=await fetch('https://api.giphy.com/v1/gifs/'+(q.value.trim()?'search?q='+encodeURIComponent(q.value.trim())+'&':'trending?')+'api_key='+GIPHY_KEY+'&limit=18&rating=pg-13');const d=await r.json();$('#gifs').innerHTML=d.data.map(g=>`<img loading="lazy" src="${esc(g.images.fixed_height_small.url)}" data-u="${esc(g.images.downsized.url)}">`).join('')}catch{$('#gifs').textContent='Could not load GIFs'}};q.oninput=()=>{clearTimeout(t);t=setTimeout(load,350)};load()}
+ }
+}
+let panelEmoji=null;
+$('#panel').onclick=e=>{
+ const b=e.target.closest('button'),im=e.target.closest('img[data-u]');
+ if(im){emit('message:send',{chat:cur,text:'',file:{url:im.dataset.u,name:'GIF',type:'image/gif'}},d=>{if(d&&d.error)toast(d.error)});closePanel();return}
+ if(!b)return;
+ if(b.dataset.t){panelTab=null;openPanel(b.dataset.t)}
+ else if(b.dataset.c){panelEmoji=b.dataset.c;panelTab=null;openPanel('emoji')}
+ else if(b.dataset.e)insertAtCursor(b.dataset.e);
+ else if(b.id==='gifPick')pickFile('image/gif');
+};
+$('#btnEmoji').onclick=()=>openPanel('emoji');
+
+// ---------- attachments ----------
+function uploadFile(blob,name,type,onp){return new Promise(res=>{
+ const x=new XMLHttpRequest();x.open('POST',API+'/api/upload');
+ x.setRequestHeader('Authorization','Bearer '+token);x.setRequestHeader('X-Filename',encodeURIComponent(name));x.setRequestHeader('X-Mime',type||'application/octet-stream');
+ x.upload.onprogress=e=>{if(e.lengthComputable&&onp)onp(Math.round(e.loaded/e.total*100))};
+ x.onload=()=>{let d={};try{d=JSON.parse(x.responseText)}catch{}res(x.status===200&&d.url?d:{error:d.error||'Upload failed'})};
+ x.onerror=()=>res({error:'Upload failed — check your connection'});x.send(blob)})}
+async function sendFile(blob,name,type){
+ if(!cur)return;
+ if(blob.size>12*1024*1024){toast('File too large (max 12 MB — about a minute of video)');return}
+ const f=await uploadFile(blob,name,type,p=>toast('Uploading… '+p+'%',60000));
+ if(f.error){toast(f.error);return}
+ emit('message:send',{chat:cur,text:'',file:f,replyTo:reply&&reply.id},d=>{if(d&&d.error)toast(d.error)});
+ reply=null;renderReply();toast('Sent');
+}
+function pickFile(accept,capture){const f=$('#file');f.accept=accept;if(capture)f.setAttribute('capture',capture);else f.removeAttribute('capture');f.click()}
+$('#file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f){closePanel();sendFile(f,f.name,f.type||'application/octet-stream')}};
+$('#btnAttach').onclick=e=>{
+ const el=popMenu(`<button data-a="media">🖼 Photo / Video / GIF</button><button data-a="cam">📷 Take a photo</button><button data-a="vid">🎥 Record a video</button><button data-a="file">📄 Document / file</button><button data-a="sched">⏰ Schedule a message</button><button data-a="ar">📍 AR note</button>`,Object.assign(e.target.getBoundingClientRect().toJSON(),{up:true}));
+ el.onclick=ev=>{const b=ev.target.closest('button');if(!b)return;closeMenu();
+  ({media:()=>pickFile('image/*,video/*'),cam:()=>pickFile('image/*','environment'),vid:()=>pickFile('video/*','environment'),file:()=>pickFile('*/*'),sched:scheduleModal,ar:openAR})[b.dataset.a]()};
+};
+let rec=null,chunks=[],recT=null;
+$('#btnMic').onclick=async()=>{
+ if(rec){rec.stop();return}
+ try{
+  const s=await navigator.mediaDevices.getUserMedia({audio:true});
+  const mt=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'].find(t=>window.MediaRecorder&&MediaRecorder.isTypeSupported(t));
+  rec=new MediaRecorder(s,mt?{mimeType:mt}:undefined);chunks=[];const t0=Date.now();
+  rec.ondataavailable=e=>chunks.push(e.data);
+  rec.onstop=()=>{clearInterval(recT);s.getTracks().forEach(t=>t.stop());const b=new Blob(chunks,{type:(rec&&rec.mimeType)||mt||'audio/webm'});rec=null;$('#btnMic').textContent='🎤';$('#btnMic').style.color='';
+   if(b.size>800)sendFile(b,'voice-note.'+(b.type.includes('mp4')?'m4a':b.type.includes('ogg')?'ogg':'webm'),b.type.split(';')[0])};
+  rec.start();$('#btnMic').textContent='⏹';$('#btnMic').style.color='#e53935';
+  recT=setInterval(()=>toast('🎙 Recording '+Math.round((Date.now()-t0)/1000)+'s — tap ⏹ to send',3000),1000);
+ }catch{toast('Microphone not available')}
+};
+
+// ---------- scheduled messages ----------
+function scheduleModal(){
+ if(!cur)return;
+ const d=new Date(Date.now()+3600e3);d.setMinutes(0,0,0);
+ const pad=n=>String(n).padStart(2,'0'),val=`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+ modal(`<h3>⏰ Schedule a message</h3><p style="color:var(--sub);margin:0 0 8px;font-size:13px">To: ${esc(title(chatById(cur)))}</p>
+ <textarea id="sText" rows="3" placeholder="Message">${esc(inp.value)}</textarea>
+ <label style="display:block;margin:10px 0 4px;font-size:13px;color:var(--sub)">Send at</label><input type="datetime-local" id="sAt" value="${val}" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text)">
+ <div class="err" id="mErr"></div>
+ <div class="acts"><button class="btn sec" id="mCancel">Close</button><button class="btn" id="sGo">Schedule</button></div>
+ <h4 style="margin:16px 0 4px">Your scheduled messages</h4><div id="sList" style="font-size:14px">Loading…</div>`);
+ const load=()=>emit('schedule:list',{},r=>{const l=r&&r.items||[];$('#sList').innerHTML=l.length?l.map(i=>{const c=chatById(i.chat);return `<div class="mem"><div class="grow"><b>${new Date(i.at).toLocaleString([],{dateStyle:'medium',timeStyle:'short'})}</b> · ${esc(c?title(c):'chat')}<br><span style="color:var(--sub)">${esc((i.text||'📎 attachment').slice(0,80))}</span></div><button class="link" data-c="${esc(i.id)}">Cancel</button></div>`}).join(''):'<span style="color:var(--sub)">Nothing scheduled</span>'});
+ load();
+ bindModal({mCancel:closeModal,sGo:()=>{
+  const at=new Date($('#sAt').value).getTime(),text=$('#sText').value;
+  emit('message:schedule',{chat:cur,text,at,replyTo:reply&&reply.id},r=>{if(r.error){$('#mErr').textContent=r.error;return}$('#mErr').textContent='';inp.value='';autosize();toast('Scheduled for '+new Date(at).toLocaleString());$('#sText').value='';load()})}});
+ $('#modal').onclick=e=>{const b=e.target.closest('[data-c]');if(b)emit('schedule:cancel',{id:b.dataset.c},()=>load())};
+}
+
+// ---------- voice / video calls (WebRTC, signaling over the chat socket) ----------
+const ICE={iceServers:[{urls:['stun:stun.cloudflare.com:3478','stun:stun.l.google.com:19302']}]};
+let call=null,callState={},ringT=null,callTimer=null;
+function renderBanner(){
+ const b=$('#callBanner'),st=cur&&callState[cur];
+ if(!st||call){b.classList.add('hidden');return}
+ b.classList.remove('hidden');
+ b.innerHTML=`<span>${st.video?'🎥':'📞'} Call in progress · ${st.users.length} in call</span><button id="bannerJoin">Join</button>`;
+ $('#bannerJoin').onclick=()=>joinCall(cur,st.video);
+}
+function stopRing(){clearInterval(ringT);ringT=null}
+function ringModal(chat,from,video){
+ if(call||ringT)return;
+ const c=chatById(chat),u=users[from]||{name:'Someone'};
+ beep();ringT=setInterval(beep,1400);
+ modal(`<h3>${video?'🎥 Video':'📞 Voice'} call</h3><p><b>${esc(u.name)}</b> is calling${c&&c.type==='group'?' in <b>'+esc(c.name)+'</b>':''}…</p><div class="acts"><button class="btn danger" id="rNo">Decline</button><button class="btn" id="rYes">Accept</button></div>`);
+ const off=setTimeout(()=>{if(ringT){stopRing();closeModal()}},40000);
+ bindModal({rNo:()=>{clearTimeout(off);stopRing();closeModal()},rYes:()=>{clearTimeout(off);stopRing();closeModal();openChat(chat,true);joinCall(chat,video)}});
+}
+async function joinCall(chat,video){
+ if(call){toast('You are already in a call');return}
+ if(!navigator.mediaDevices||!window.RTCPeerConnection){toast('Calls are not supported in this browser');return}
+ let local;
+ try{local=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:video?{facingMode:'user'}:false})}
+ catch{toast(video?'Allow camera and microphone to start a video call':'Allow the microphone to start a call');return}
+ call={chat,video,local,peers:{},muted:false,camOff:false,facing:'user',noteMode:false,t0:Date.now()};
+ showCallUI();
+ emit('call:join',{chat,video},d=>{
+  if(!d||d.error){toast(d&&d.error||'Could not join the call');endCallLocal();return}
+  call.video=d.call.video;d.call.users.forEach(u=>makePeer(u,true));renderTiles();
+ });
+}
+function makePeer(uid,initiator){
+ if(call.peers[uid])return call.peers[uid];
+ const pc=new RTCPeerConnection(ICE),peer={pc,stream:new MediaStream(),pending:[],cam:true};
+ call.peers[uid]=peer;
+ call.local.getTracks().forEach(t=>pc.addTrack(t,call.local));
+ pc.ontrack=e=>{if(e.streams[0])peer.stream=e.streams[0];else peer.stream.addTrack(e.track);renderTiles()};
+ pc.onicecandidate=e=>{if(e.candidate)emit('call:signal',{chat:call.chat,to:uid,data:{candidate:e.candidate}})};
+ pc.onconnectionstatechange=()=>{if(pc.connectionState==='failed')toast('Connection to '+((users[uid]||{}).name||'a participant')+' failed (network may block direct calls)')};
+ if(initiator)pc.createOffer().then(o=>pc.setLocalDescription(o)).then(()=>emit('call:signal',{chat:call.chat,to:uid,data:{sdp:pc.localDescription}})).catch(()=>{});
+ setTimeout(()=>{if(call&&call.peers[uid]===peer)sendState(uid)},1200);
+ renderTiles();return peer;
+}
+function sendState(to){
+ const data={state:{cam:!call.camOff&&call.video,mic:!call.muted}};
+ if(to)emit('call:signal',{chat:call.chat,to,data});else Object.keys(call.peers).forEach(u=>emit('call:signal',{chat:call.chat,to:u,data}));
+}
+async function onSignal({chat,from,data}){
+ if(!call||call.chat!==chat)return;
+ if(data.state){const p=call.peers[from];if(p){p.cam=!!data.state.cam;p.mic=!!data.state.mic;renderTiles()}return}
+ const peer=makePeer(from,false),pc=peer.pc;
+ try{
+  if(data.sdp){
+   await pc.setRemoteDescription(data.sdp);
+   peer.pending.splice(0).forEach(c=>pc.addIceCandidate(c).catch(()=>{}));
+   if(data.sdp.type==='offer'){const a=await pc.createAnswer();await pc.setLocalDescription(a);emit('call:signal',{chat,to:from,data:{sdp:pc.localDescription}})}
+  }else if(data.candidate){
+   if(pc.remoteDescription)await pc.addIceCandidate(data.candidate);else peer.pending.push(data.candidate);
+  }
+ }catch{}
+}
+function dropPeer(uid){const p=call&&call.peers[uid];if(!p)return;try{p.pc.close()}catch{}delete call.peers[uid];renderTiles()}
+function showCallUI(){
+ const c=chatById(call.chat);
+ $('#call').classList.remove('hidden');$('#call').classList.toggle('noteMode',false);
+ $('#callTitle').textContent=(call.video?'🎥 ':'📞 ')+(c?title(c):'Call');
+ $('#tiles').innerHTML='';
+ $('#cCam').classList.toggle('hidden',!call.video);$('#cFlip').classList.toggle('hidden',!call.video);
+ $('#cMic').textContent='🎤';$('#cMic').classList.remove('off');$('#cCam').classList.remove('off');$('#cNote').classList.remove('off');
+ clearInterval(callTimer);callTimer=setInterval(()=>{if(!call)return;const s=Math.floor((Date.now()-call.t0)/1000);$('#callTime').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0')},1000);
+ renderTiles();renderBanner();
+}
+function renderTiles(){
+ if(!call)return;
+ const wrap=$('#tiles'),want=[me.id,...Object.keys(call.peers)];
+ [...wrap.children].forEach(el=>{if(!want.includes(el.dataset.uid))el.remove()});
+ want.forEach(uid=>{
+  let el=wrap.querySelector(`[data-uid="${uid}"]`);
+  const local=uid===me.id,u=users[uid]||{name:'…'};
+  if(!el){
+   el=document.createElement('div');el.className='tile';el.dataset.uid=uid;
+   el.innerHTML='<video autoplay playsinline></video><div class="noV"></div><div class="nm"></div><div class="al"></div>';
+   wrap.appendChild(el);el.onclick=ev=>tileClick(el,uid,ev);
+  }
+  const v=el.querySelector('video'),stream=local?call.local:call.peers[uid].stream;
+  if(v.srcObject!==stream){v.srcObject=stream;v.muted=local;v.play&&v.play().catch(()=>{})}
+  const hasV=stream.getVideoTracks().length>0&&(local?!call.camOff:call.peers[uid].cam!==false);
+  el.classList.toggle('mirror',local&&call.facing==='user');
+  const nv=el.querySelector('.noV');nv.style.display=hasV?'none':'flex';
+  nv.innerHTML=avHtml(u.name,u.avatar,false);
+  el.querySelector('.nm').textContent=(local?'You':u.name)+((!local&&call.peers[uid].mic===false)||(local&&call.muted)?' 🔇':'');
+ });
+ const n=want.length;$('#tiles').style.gridTemplateColumns=n<=1?'1fr':`repeat(auto-fit,minmax(min(100%,${n>4?'200px':'260px'}),1fr))`;
+}
+function addAnnot(target,x,y,text,by,aid){
+ const el=$('#tiles').querySelector(`[data-uid="${target}"] .al`);if(!el)return;
+ const a=document.createElement('div');a.className='annot';a.style.left=(x*100)+'%';a.style.top=(y*100)+'%';
+ a.innerHTML='📌 <b>'+esc(by)+':</b> '+esc(text);a.dataset.aid=aid;el.appendChild(a);setTimeout(()=>a.remove(),60000);
+}
+function tileClick(el,uid,ev){
+ if(!call||!call.noteMode)return;
+ const r=el.getBoundingClientRect();
+ let x=(ev.clientX-r.left)/r.width,y=(ev.clientY-r.top)/r.height;
+ const text=prompt('Note to pin on this video (everyone in the call sees it):');
+ if(!text||!text.trim())return;
+ const aid=Math.random().toString(36).slice(2,10);
+ emit('call:annot',{chat:call.chat,target:uid,x,y,text,aid});addAnnot(uid,x,y,text,'You',aid);
+ call.noteMode=false;$('#call').classList.remove('noteMode');$('#cNote').classList.remove('off');
+}
+$('#cMic').onclick=()=>{if(!call)return;call.muted=!call.muted;call.local.getAudioTracks().forEach(t=>t.enabled=!call.muted);$('#cMic').textContent=call.muted?'🔇':'🎤';$('#cMic').classList.toggle('off',call.muted);sendState();renderTiles()};
+$('#cCam').onclick=()=>{if(!call)return;call.camOff=!call.camOff;call.local.getVideoTracks().forEach(t=>t.enabled=!call.camOff);$('#cCam').classList.toggle('off',call.camOff);sendState();renderTiles()};
+$('#cFlip').onclick=async()=>{
+ if(!call||!call.video)return;
+ const facing=call.facing==='user'?'environment':'user';
+ try{
+  const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing}},audio:false});
+  const nt=s.getVideoTracks()[0],old=call.local.getVideoTracks()[0];
+  Object.values(call.peers).forEach(p=>{const snd=p.pc.getSenders().find(x=>x.track&&x.track.kind==='video');if(snd)snd.replaceTrack(nt)});
+  if(old){call.local.removeTrack(old);old.stop()}call.local.addTrack(nt);nt.enabled=!call.camOff;call.facing=facing;
+  const v=$('#tiles').querySelector(`[data-uid="${me.id}"] video`);if(v){v.srcObject=null;v.srcObject=call.local}renderTiles();
+ }catch{toast('Could not switch camera')}
+};
+$('#cNote').onclick=()=>{if(!call)return;call.noteMode=!call.noteMode;$('#call').classList.toggle('noteMode',call.noteMode);$('#cNote').classList.toggle('off',call.noteMode);if(call.noteMode)toast('Tap anywhere on a video to pin a note there',4000)};
+function endCallLocal(){
+ if(!call)return;
+ Object.values(call.peers).forEach(p=>{try{p.pc.close()}catch{}});
+ call.local.getTracks().forEach(t=>t.stop());
+ clearInterval(callTimer);call=null;$('#call').classList.add('hidden');$('#tiles').innerHTML='';renderBanner();
+}
+$('#cEnd').onclick=()=>{if(!call)return;const chat=call.chat;endCallLocal();emit('call:leave',{chat},()=>{})};
+$('#btnCallA').onclick=()=>cur&&joinCall(cur,false);
+$('#btnCallV').onclick=()=>cur&&joinCall(cur,true);
+
+// ---------- AR notes: sticky notes pinned to a real-world spot ----------
+// A note stores the GPS spot where it was left, the compass direction + tilt the phone
+// was pointing, and roughly how far away the object was. Group members who stand near
+// that spot see it float in their camera view, in the same direction.
+const R_E=6371000,rad=d=>d*Math.PI/180,deg=r=>r*180/Math.PI,wrap180=a=>((a%360)+540)%360-180;
+function dest(lat,lng,hdg,d){const a=rad(hdg),dl=d/R_E,p1=rad(lat),l1=rad(lng);const p2=Math.asin(Math.sin(p1)*Math.cos(dl)+Math.cos(p1)*Math.sin(dl)*Math.cos(a));const l2=l1+Math.atan2(Math.sin(a)*Math.sin(dl)*Math.cos(p1),Math.cos(dl)-Math.sin(p1)*Math.sin(p2));return{lat:deg(p2),lng:deg(l2)}}
+function rel(a,b){const dx=rad(b.lng-a.lng)*Math.cos(rad((a.lat+b.lat)/2))*R_E,dy=rad(b.lat-a.lat)*R_E;return{d:Math.hypot(dx,dy),brg:(deg(Math.atan2(dx,dy))+360)%360}}
+function pinTarget(p){const t=dest(p.lat,p.lng,p.heading,p.dist);return{lat:t.lat,lng:t.lng,h:p.dist*Math.tan(rad(p.pitch))}}
+function camPose(alpha,beta,gamma){const x=rad(beta),y=rad(gamma),z=rad(alpha),cY=Math.cos(y),sY=Math.sin(y),cZ=Math.cos(z),sZ=Math.sin(z),sX=Math.sin(x),cX=Math.cos(x);const vx=-cZ*sY-sZ*sX*cY,vy=-sZ*sY+cZ*sX*cY,vz=-cX*cY;return{heading:(deg(Math.atan2(vx,vy))+360)%360,pitch:deg(Math.asin(Math.max(-1,Math.min(1,vz))))}}
+const AR_HFOV=54;
+function arProject(p,pose,pos,W,H){
+ const t=pinTarget(p),r=rel(pos,t),az=wrap180(r.brg-pose.heading);
+ const el=deg(Math.atan2(t.h,Math.max(r.d,0.5))),tanH=Math.tan(rad(AR_HFOV/2)),tanV=tanH*H/W;
+ const vfov=deg(2*Math.atan(tanV)),dEl=el-pose.pitch;
+ const x=W/2+(W/2)*Math.tan(rad(az))/tanH,y=H/2-(H/2)*Math.tan(rad(dEl))/tanV;
+ return{x,y,d:r.d,az,vis:Math.abs(az)<AR_HFOV/2+6&&Math.abs(dEl)<vfov/2+6&&r.d<=60};
+}
+window.__ar={dest,rel,pinTarget,camPose,arProject};
+let ar=null;
+const arOri=e=>{
+ if(!ar||e.alpha==null)return;
+ if(e.type==='deviceorientationabsolute')ar.abs=true;else if(ar.abs)return;
+ const c=camPose(e.alpha,e.beta,e.gamma);
+ let h=e.webkitCompassHeading!=null?e.webkitCompassHeading:c.heading;
+ const old=ar.pose;
+ ar.pose={heading:old?(old.heading+0.3*wrap180(h-old.heading)+360)%360:h,pitch:old?old.pitch+0.3*(c.pitch-old.pitch):c.pitch};
+};
+async function openAR(){
+ if(!cur||ar)return;
+ const c=chatById(cur);
+ ar={chat:cur,pos:null,pose:null,pins:[],nodes:{},raf:0,stream:null,watch:null,abs:false};
+ $('#ar').classList.remove('hidden');$('#arTitle').textContent='📍 AR notes · '+title(c);
+ $('#arStat').textContent='Starting camera, GPS and compass…';
+ try{if(window.DeviceOrientationEvent&&DeviceOrientationEvent.requestPermission)await DeviceOrientationEvent.requestPermission()}catch{}
+ addEventListener('deviceorientationabsolute',arOri,true);addEventListener('deviceorientation',arOri,true);
+ if(navigator.geolocation)ar.watch=navigator.geolocation.watchPosition(p=>{if(ar)ar.pos={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy}},e=>{if(ar)ar.gpsErr=e.code===1?'Allow location access to use AR notes':'GPS unavailable'},{enableHighAccuracy:true,maximumAge:1000,timeout:20000});
+ else ar.gpsErr='This device has no GPS';
+ try{ar.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});const v=$('#arVid');v.srcObject=ar.stream;v.play().catch(()=>{})}catch{ar.noCam=true;toast('Camera not available — showing the notes list view only')}
+ emit('pin:list',{chat:cur},d=>{if(ar&&d&&d.pins)ar.pins=d.pins});
+ arLoop();
+}
+function closeAR(){
+ if(!ar)return;
+ cancelAnimationFrame(ar.raf);removeEventListener('deviceorientationabsolute',arOri,true);removeEventListener('deviceorientation',arOri,true);
+ if(ar.watch!=null&&navigator.geolocation)navigator.geolocation.clearWatch(ar.watch);
+ if(ar.stream)ar.stream.getTracks().forEach(t=>t.stop());
+ $('#arVid').srcObject=null;$('#arLayer').innerHTML='';$('#ar').classList.add('hidden');ar=null;
+}
+function arLoop(){
+ if(!ar)return;ar.raf=requestAnimationFrame(arLoop);
+ const box=$('#ar'),W=box.clientWidth,H=box.clientHeight,layer=$('#arLayer');
+ const st=[];
+ st.push(ar.pos?'GPS ±'+Math.round(ar.pos.acc)+' m':(ar.gpsErr||'Waiting for GPS…'));
+ st.push(ar.pose?'↑ '+Math.round(ar.pose.heading)+'°':'compass…');
+ $('#arStat').textContent=st.join(' · ');
+ const ids=new Set(ar.pins.map(p=>p.id));
+ Object.keys(ar.nodes).forEach(k=>{if(!ids.has(k)){ar.nodes[k].remove();delete ar.nodes[k]}});
+ let near=0;
+ ar.pins.forEach(p=>{
+  let n=ar.nodes[p.id];
+  if(!n){n=ar.nodes[p.id]=document.createElement('div');n.className='arn';n.innerHTML=`<b>${esc(p.emoji)} ${esc(p.text)}</b><small></small>`;layer.appendChild(n);n.onclick=()=>arNoteInfo(p)}
+  if(!ar.pos||!ar.pose){n.style.display='none';return}
+  const q=arProject(p,ar.pose,ar.pos,W,H);
+  if(q.d<=60)near++;
+  if(!q.vis){n.style.display='none';return}
+  n.style.display='block';
+  const s=Math.max(.55,Math.min(1.25,3/Math.max(q.d,2)+.35));
+  n.style.transform=`translate(${q.x}px,${q.y}px) translate(-50%,-100%) scale(${s})`;
+  n.querySelector('small').textContent=((users[p.from]||{}).name||'Someone')+' · '+(q.d<10?q.d.toFixed(1):Math.round(q.d))+' m away';
+ });
+ ar.near=near;
+}
+function arNoteInfo(p){
+ const u=users[p.from]||{name:'Someone'},c=chatById(p.chat),can=p.from===me.id||(c&&c.admin===me.id);
+ modal(`<h3>${esc(p.emoji)} AR note</h3><p style="white-space:pre-wrap">${esc(p.text)}</p><p style="color:var(--sub);font-size:13px">Left by ${esc(u.name)} · ${new Date(p.ts).toLocaleString()}</p>${p.photo?`<img src="${esc(U(p.photo))}" style="width:100%;border-radius:8px" alt="Photo of the spot">`:''}<div class="acts">${can?'<button class="btn danger" id="pDel">Delete</button>':''}<button class="btn" id="mCancel">Close</button></div>`);
+ bindModal({mCancel:closeModal,pDel:()=>emit('pin:delete',{chat:p.chat,id:p.id},d=>{toast(d.error||'Note deleted');closeModal()})});
+}
+function arPlaceModal(){
+ if(!ar)return;
+ if(!ar.pos){toast(ar.gpsErr||'Still finding your location — try again in a moment');return}
+ const emo=['📌','🍳','⚠️','🔑','💊','🗑','❤️','⭐','🧺','🚪'];
+ modal(`<h3>📌 Pin a note here</h3><p style="color:var(--sub);font-size:13px;margin:0 0 8px">Point the cross-hair at the object, then write the note. Only members of <b>${esc(title(chatById(ar.chat)))}</b> will see it.</p>
+ <textarea id="pText" rows="3" maxlength="200" placeholder="e.g. Turn the stove to low for 10 minutes"></textarea>
+ <div style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap" id="pEmo">${emo.map((e,i)=>`<button class="ib${i?'':' sel'}" data-e="${e}" style="font-size:22px;${i?'':'background:var(--hover)'}">${e}</button>`).join('')}</div>
+ <label style="font-size:13px;color:var(--sub)">Distance to the object: <b id="pDv">2.0</b> m</label><input type="range" id="pDist" min="0.5" max="10" step="0.5" value="2" style="width:100%">
+ <label style="display:flex;gap:6px;align-items:center;margin-top:8px;font-size:14px"><input type="checkbox" id="pPhoto" ${ar.noCam?'disabled':'checked'}> Attach a photo of the spot</label>
+ <div class="err" id="mErr"></div><div class="acts"><button class="btn sec" id="mCancel">Cancel</button><button class="btn" id="pGo">Pin note</button></div>`);
+ let emoji='📌';
+ $('#pEmo').onclick=e=>{const b=e.target.closest('button');if(!b)return;emoji=b.dataset.e;$('#pEmo').querySelectorAll('button').forEach(x=>x.style.background=x===b?'var(--hover)':'')};
+ $('#pDist').oninput=e=>{$('#pDv').textContent=(+e.target.value).toFixed(1)};
+ bindModal({mCancel:closeModal,pGo:async()=>{
+  const text=$('#pText').value.trim();if(!text){$('#mErr').textContent='Write a note first';return}
+  $('#pGo').disabled=true;
+  let photo=null;
+  if($('#pPhoto').checked&&ar.stream){
+   try{const v=$('#arVid'),c=document.createElement('canvas'),sc=Math.min(1,640/v.videoWidth);c.width=v.videoWidth*sc;c.height=v.videoHeight*sc;c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+    const b=await new Promise(r=>c.toBlob(r,'image/jpeg',.6));const f=await uploadFile(b,'spot.jpg','image/jpeg');if(f.url)photo=f.url}catch{}
+  }
+  const pose=ar.pose||{heading:0,pitch:0};
+  emit('pin:create',{chat:ar.chat,text,emoji,lat:ar.pos.lat,lng:ar.pos.lng,acc:ar.pos.acc,heading:pose.heading,pitch:pose.pitch,dist:+$('#pDist').value,photo},d=>{
+   if(d.error){$('#mErr').textContent=d.error;$('#pGo').disabled=false;return}
+   closeModal();toast('📌 Note pinned');
+  });
+ }});
+}
+function arListModal(){
+ if(!ar)return;
+ const pins=ar.pins.slice().reverse();
+ modal(`<h3>📍 Notes in this chat</h3>${pins.length?pins.map(p=>{
+  const u=users[p.from]||{name:'Someone'};let dist='';
+  if(ar.pos){const t=pinTarget(p),r=rel(ar.pos,t);dist=r.d<1000?Math.round(r.d)+' m away':(r.d/1000).toFixed(1)+' km away'}
+  return `<div class="mem" data-id="${esc(p.id)}" style="cursor:pointer"><div style="font-size:24px">${esc(p.emoji)}</div><div class="grow"><b>${esc(p.text.slice(0,70))}</b><br><span style="color:var(--sub);font-size:12px">${esc(u.name)}${dist?' · '+dist:''}</span></div></div>`}).join(''):'<p style="color:var(--sub)">No notes yet. Tap “Pin a note” while pointing at something.</p>'}<div class="acts"><button class="btn" id="mCancel">Close</button></div>`);
+ bindModal({mCancel:closeModal});
+ $('#modal').onclick=e=>{const el=e.target.closest('.mem[data-id]');if(el){const p=ar.pins.find(x=>x.id===el.dataset.id);if(p)arNoteInfo(p)}};
+}
+$('#arClose').onclick=closeAR;$('#arPlace').onclick=arPlaceModal;$('#arList').onclick=arListModal;
+function nearbyCheck(){
+ if(!navigator.permissions||!navigator.geolocation)return;
+ navigator.permissions.query({name:'geolocation'}).then(s=>{
+  if(s.state!=='granted')return;
+  navigator.geolocation.getCurrentPosition(p=>{
+   const pos={lat:p.coords.latitude,lng:p.coords.longitude};let found=0,left=chats.length;
+   chats.forEach(c=>emit('pin:list',{chat:c.id},d=>{
+    ((d&&d.pins)||[]).forEach(x=>{if(rel(pos,pinTarget(x)).d<=40)found++});
+    if(--left===0&&found)toast('📍 '+found+' AR note'+(found>1?'s':'')+' near you — open a chat → ⋮ → AR notes',6000);
+   }));
+  },()=>{},{maximumAge:60000,timeout:8000});
+ }).catch(()=>{});
+}
 
 // ---------- PWA ----------
 if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
