@@ -332,7 +332,7 @@ $('#msgSearch').oninput=e=>{msgFilter=e.target.value;renderMsgs()};
 
 // ---------- composer ----------
 const inp=$('#input');let typingOn=false,typingT;
-function autosize(){inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,120)+'px'}
+function autosize(){inp.style.height='auto';const h=inp.scrollHeight;inp.style.height=Math.min(h,120)+'px';inp.style.overflowY=h>120?'auto':'hidden'}
 function syncSendMic(){const has=inp.value.trim().length>0;$('#btnSend').classList.toggle('hidden',!has);$('#btnMic').classList.toggle('hidden',has)}
 inp.addEventListener('input',()=>{
  autosize();syncSendMic();
