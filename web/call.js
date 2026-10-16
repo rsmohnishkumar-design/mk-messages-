@@ -8,13 +8,40 @@ function renderBanner(){
  b.innerHTML=`<span>${st.video?'Video':'Voice'} call in progress, ${st.users.length} in the call</span><button id="bannerJoin">Join</button>`;
  $('#bannerJoin').onclick=()=>joinCall(cur,st.video);
 }
-function stopRing(){clearInterval(ringT);clearTimeout(ringOff);ringT=null;ringChat=null}
+// A generated two-tone ringtone played through an <audio> element that is unlocked by the
+// first tap anywhere, so it can ring later without a fresh user gesture.
+let ringAudio=null,ringVib=null;
+function ringtoneUrl(){
+ const sr=16000,n=sr*3,pcm=new Int16Array(n);
+ for(let i=0;i<n;i++){const t=i/sr,on=t<0.45||(t>=0.65&&t<1.1);
+  if(on){const ph=t<0.65?t:t-0.65,env=Math.min(1,ph*40,(0.45-Math.min(ph,0.45))*40+0.2);pcm[i]=Math.round((Math.sin(2*Math.PI*440*t)+Math.sin(2*Math.PI*480*t))*0.22*32767*Math.min(1,env))}}
+ const b=new ArrayBuffer(44+n*2),v=new DataView(b),w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+ w(0,'RIFF');v.setUint32(4,36+n*2,true);w(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*2,true);
+ new Int16Array(b,44).set(pcm);return URL.createObjectURL(new Blob([b],{type:'audio/wav'}));
+}
+function ringUnlock(){
+ if(ringAudio)return;
+ ringAudio=new Audio(ringtoneUrl());ringAudio.loop=true;ringAudio.muted=true;
+ ringAudio.play().then(()=>{ringAudio.pause();ringAudio.currentTime=0;ringAudio.muted=false}).catch(()=>{ringAudio.muted=false});
+}
+['pointerdown','keydown','touchstart'].forEach(ev=>addEventListener(ev,ringUnlock,{once:true,capture:true}));
+function startRingSound(){
+ if(ringAudio){ringAudio.muted=false;ringAudio.currentTime=0;ringAudio.play().catch(()=>beep())}else beep();
+ if(navigator.vibrate){navigator.vibrate([500,300,500]);ringVib=setInterval(()=>navigator.vibrate([500,300,500]),3000)}
+}
+function stopRing(){
+ clearInterval(ringT);clearInterval(ringVib);clearTimeout(ringOff);ringT=null;ringVib=null;ringChat=null;
+ if(ringAudio)try{ringAudio.pause();ringAudio.currentTime=0}catch{}
+ if(navigator.vibrate)navigator.vibrate(0);
+}
 function dismissRing(){if(ringChat!==null){stopRing();closeModal()}}
 function ringModal(chat,from,video,quiet){
- if(call||ringChat!==null)return;
+ if(call)return;
+ if(ringChat!==null&&$('#rYes'))return;  // already ringing
+ stopRing();
  const c=chatById(chat),u=users[from]||{name:'Someone'};
- ringChat=chat;if(!quiet){beep();ringT=setInterval(beep,1400)}
- modal(`<h3>Incoming ${video?'video':'voice'} call</h3><p><b>${esc(u.name)}</b> is calling${c&&c.type==='group'?' in <b>'+esc(c.name)+'</b>':''}.</p><div class="acts"><button class="btn danger" id="rNo">Decline</button><button class="btn" id="rYes">Accept</button></div>`);
+ ringChat=chat;if(!quiet)startRingSound();
+ modal(`<h3>Incoming ${video?'video':'voice'} call</h3><p style="font-size:17px"><b>${esc(u.name)}</b> is calling${c&&c.type==='group'?' in <b>'+esc(c.name)+'</b>':''}.</p><div class="acts"><button class="btn danger" id="rNo">Decline</button><button class="btn" id="rYes">Accept</button></div>`);
  ringOff=setTimeout(()=>{if(ringChat===chat){stopRing();closeModal()}},45000);
  bindModal({rNo:()=>{stopRing();closeModal()},rYes:()=>{stopRing();closeModal();openChat(chat,true);joinCall(chat,video)}});
 }

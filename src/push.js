@@ -66,7 +66,7 @@ export async function encryptPayload(sub, data) {
 }
 
 // Returns the HTTP status from the push service (201 = accepted, 404/410 = subscription gone).
-export async function sendPush(vapid, sub, payload, { ttl = 60, urgency = 'high', subject = 'mailto:admin@mk-messages.invalid' } = {}) {
+export async function sendPush(vapid, sub, payload, { ttl = 60, urgency = 'high', subject = 'https://mk-messages.pages.dev' } = {}) {
   if (!PUSH_HOST.test(sub.endpoint)) return 0;
   const body = await encryptPayload(sub, enc.encode(JSON.stringify(payload)).slice(0, 3500));
   const res = await fetch(sub.endpoint, {
