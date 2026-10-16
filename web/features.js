@@ -114,7 +114,7 @@ async function recStart(){
  const mime=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'].find(t=>MediaRecorder.isTypeSupported(t));
  const mr=new MediaRecorder(stream,mime?{mimeType:mime}:undefined);
  rec={mr,stream,chunks:[],mime:mime||mr.mimeType||'audio/webm',acc:0,t0:Date.now(),paused:false,bars:[],lastBar:0,audio:null,url:null,chat:cur};
- mr.ondataavailable=e=>{if(e.data&&e.data.size)rec.chunks.push(e.data)};
+ const R=rec;mr.ondataavailable=e=>{if(e.data&&e.data.size)R.chunks.push(e.data)};
  try{const AC=window.AudioContext||window.webkitAudioContext;rec.ctx=new AC();const src=rec.ctx.createMediaStreamSource(stream);rec.an=rec.ctx.createAnalyser();rec.an.fftSize=256;src.connect(rec.an)}catch{}
  mr.start(250);
  $('#composer').classList.add('hidden');$('#recbar').classList.remove('hidden','paused');
