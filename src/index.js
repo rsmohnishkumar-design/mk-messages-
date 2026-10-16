@@ -3,22 +3,41 @@
 // First registered user = Admin. Only the admin creates groups (6-digit number).
 // Anyone with the number can join and chat.
 
+const ORIGINS = ['https://rsmohnishkumar-design.github.io'];
+
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
-    if (url.pathname.startsWith('/uploads/') && env.UPLOADS) {
-      const obj = await env.UPLOADS.get(decodeURIComponent(url.pathname.slice(9)));
-      if (!obj) return new Response('Not found', { status: 404 });
-      const h = new Headers();
-      obj.writeHttpMetadata(h);
-      h.set('X-Content-Type-Options', 'nosniff');
-      h.set('Cache-Control', 'public, max-age=31536000, immutable');
-      return new Response(obj.body, { headers: h });
-    }
-    const stub = env.HUB.get(env.HUB.idFromName('main'));
-    return stub.fetch(request);
+    const origin = request.headers.get('Origin');
+    const cors = origin && ORIGINS.includes(origin) ? {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Filename, X-Mime',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Max-Age': '86400',
+      Vary: 'Origin',
+    } : {};
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+    const res = await route(request, env);
+    if (res.status === 101 || !origin) return res;
+    const h = new Headers(res.headers);
+    for (const [k, v] of Object.entries(cors)) h.set(k, v);
+    return new Response(res.body, { status: res.status, headers: h });
   },
 };
+
+async function route(request, env) {
+  const url = new URL(request.url);
+  if (url.pathname.startsWith('/uploads/') && env.UPLOADS) {
+    const obj = await env.UPLOADS.get(decodeURIComponent(url.pathname.slice(9)));
+    if (!obj) return new Response('Not found', { status: 404 });
+    const h = new Headers();
+    obj.writeHttpMetadata(h);
+    h.set('X-Content-Type-Options', 'nosniff');
+    h.set('Cache-Control', 'public, max-age=31536000, immutable');
+    return new Response(obj.body, { headers: h });
+  }
+  const stub = env.HUB.get(env.HUB.idFromName('main'));
+  return stub.fetch(request);
+}
 
 const json = (d, status = 200) => new Response(JSON.stringify(d), { status, headers: { 'Content-Type': 'application/json' } });
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
