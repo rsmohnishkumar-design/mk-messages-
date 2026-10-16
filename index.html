@@ -4,9 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MK Messages</title>
+<meta name="theme-color" content="#1a73e8">
+<meta name="application-name" content="MK Messages">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MK Messages">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
-:root{--bg:#f0f2f5;--panel:#fff;--text:#111b21;--sub:#667781;--line:#e9edef;--accent:#00a884;--accent2:#d9fdd3;--in:#fff;--chatbg:#efeae2;--hover:#f5f6f6;--danger:#d93025;--blue:#53bdeb}
-:root[data-theme=dark]{--bg:#0b141a;--panel:#111b21;--text:#e9edef;--sub:#8696a0;--line:#222d34;--accent:#00a884;--accent2:#005c4b;--in:#202c33;--chatbg:#0b141a;--hover:#202c33}
+:root{--bg:#f0f2f5;--panel:#fff;--text:#111b21;--sub:#667781;--line:#e9edef;--accent:#1a73e8;--accent2:#d6e6ff;--in:#fff;--chatbg:#e8eef7;--hover:#f1f4f9;--danger:#d93025;--blue:#0b57d0}
+:root[data-theme=dark]{--bg:#0b141a;--panel:#111b21;--text:#e9edef;--sub:#8696a0;--line:#222d34;--accent:#3b82f6;--accent2:#0f4c9c;--in:#202c33;--chatbg:#0b141a;--hover:#202c33;--blue:#8ec5ff}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
@@ -62,6 +71,8 @@ input[type=text],input[type=password],textarea{width:100%;padding:10px 12px;bord
 .react span{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:0 6px;font-size:13px}
 .b img,.b video{max-width:100%;max-height:300px;border-radius:6px;display:block}
 .b audio{max-width:240px}
+.b{-webkit-touch-callout:none}
+@media(hover:none){.b{-webkit-user-select:none;user-select:none}}
 .dd{position:absolute;top:0;right:2px;background:none;border:0;color:var(--sub);opacity:0;font-size:16px;padding:0 4px}
 .b:hover .dd{opacity:1}
 @media(hover:none){.dd{opacity:.6}}
@@ -117,6 +128,7 @@ input[type=text],input[type=password],textarea{width:100%;padding:10px 12px;bord
   <div class="top">
    <div class="av" id="meAv" title="Profile"></div>
    <div class="grow"><b>MK Messages</b></div>
+   <button class="btn hidden" id="btnInstall" style="padding:6px 10px;font-size:13px">⬇ Install app</button>
    <button class="ib" id="btnTheme" title="Dark mode">🌓</button>
    <button class="ib" id="btnNew" title="Join or create group">➕</button>
    <button class="ib" id="btnOut" title="Sign out">⎋</button>
@@ -314,18 +326,37 @@ $('#msgs').onclick=e=>{
  const b=e.target.closest('.b');if(!b||!e.target.closest('[data-act=menu]'))return;
  msgMenu(b.dataset.id,e.target.getBoundingClientRect());
 };
+(function(){
+ const box=$('#msgs');let t=null,fired=0,sx=0,sy=0;
+ const open=(b,x,y)=>{fired=Date.now();msgMenu(b.dataset.id,{left:x,right:x,top:y,bottom:y,pt:true})};
+ box.addEventListener('touchstart',e=>{
+  const b=e.target.closest('.b');if(!b||e.touches.length!==1)return;
+  const p=e.touches[0];sx=p.clientX;sy=p.clientY;clearTimeout(t);
+  t=setTimeout(()=>{open(b,sx,sy);if(navigator.vibrate)navigator.vibrate(15)},450);
+ },{passive:true});
+ box.addEventListener('touchmove',e=>{const p=e.touches[0];if(Math.abs(p.clientX-sx)>10||Math.abs(p.clientY-sy)>10)clearTimeout(t)},{passive:true});
+ box.addEventListener('touchcancel',()=>clearTimeout(t),{passive:true});
+ box.addEventListener('touchend',e=>{clearTimeout(t);if(Date.now()-fired<700&&e.cancelable)e.preventDefault()});
+ box.addEventListener('contextmenu',e=>{
+  const b=e.target.closest('.b');if(!b)return;
+  e.preventDefault();if(Date.now()-fired>800)open(b,e.clientX,e.clientY);
+ });
+})();
 function popMenu(html,rect){
  closeMenu();
  const m=document.createElement('div');m.className='menu';m.id='menu';m.innerHTML=html;document.body.appendChild(m);
  const w=m.offsetWidth,h=m.offsetHeight;
- m.style.left=Math.max(8,Math.min(rect.left-w+30,innerWidth-w-8))+'px';
- m.style.top=Math.max(8,Math.min(rect.bottom,innerHeight-h-8))+'px';
+ const x=rect.pt?rect.left-w/2:rect.left-w+30,y=rect.pt?rect.top-h/2:rect.bottom;
+ m.style.left=Math.max(8,Math.min(x,innerWidth-w-8))+'px';
+ m.style.top=Math.max(8,Math.min(y,innerHeight-h-8))+'px';
+ menuAt=Date.now();
  return m;
 }
+let menuAt=0;
 function closeMenu(){const m=$('#menu');if(m)m.remove()}
-document.addEventListener('click',e=>{if(!e.target.closest('.menu')&&!e.target.closest('[data-act=menu]')&&e.target.id!=='btnMore')closeMenu()});
+document.addEventListener('click',e=>{if(Date.now()-menuAt<500)return;if(!e.target.closest('.menu')&&!e.target.closest('[data-act=menu]')&&e.target.id!=='btnMore')closeMenu()});
 function msgMenu(mid,rect){
- const c=chatById(cur),m=(msgs[cur]||[]).find(x=>x.id===mid);if(!m)return;
+ const c=chatById(cur),m=(msgs[cur]||[]).find(x=>x.id===mid);if(!m||m.deleted)return;
  const mine=m.from===me.id,canAll=mine||c.admin===me.id||me.isAdmin;
  const emo=['👍','❤️','😂','😮','😢','🙏'].map(x=>`<button data-r="${x}">${x}</button>`).join('');
  const el=popMenu(`<div class="emo">${emo}</div><button data-a="reply">↩ Reply</button>${m.text?'<button data-a="copy">⧉ Copy</button>':''}<button data-a="star">${(m.starredBy||[]).includes(me.id)?'☆ Unstar':'⭐ Star'}</button><button data-a="fwd">↪ Forward</button>${mine&&m.text?'<button data-a="edit">✎ Edit</button>':''}<button data-a="delme">🗑 Delete for me</button>${canAll?'<button data-a="delall">🗑 Delete for everyone</button>':''}`,rect);
@@ -434,6 +465,20 @@ $('#btnMore').onclick=e=>{
   if(b.dataset.a==='pin')emit('chat:pref',{chat:cur,pinned:!c.pinned});
   if(b.dataset.a==='mute')emit('chat:pref',{chat:cur,muted:!c.muted});
   if(b.dataset.a==='clear'&&confirm('Clear all messages for you?')){emit('chat:clear',{chat:cur});msgs[cur]=[];renderMsgs()}};
+};
+
+// ---------- PWA ----------
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+let installEv=null;
+const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+const instBtn=$('#btnInstall');
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEv=e;if(!standalone)instBtn.classList.remove('hidden')});
+addEventListener('appinstalled',()=>{installEv=null;instBtn.classList.add('hidden');toast('MK Messages installed')});
+if(isIOS&&!standalone)instBtn.classList.remove('hidden');
+instBtn.onclick=async()=>{
+ if(installEv){installEv.prompt();await installEv.userChoice.catch(()=>{});installEv=null;instBtn.classList.add('hidden')}
+ else modal('<h3>Install MK Messages</h3><p>Tap the <b>Share</b> button in Safari, then choose <b>Add to Home Screen</b>.</p><div class="acts"><button class="btn" id="mCancel">OK</button></div>'),bindModal({mCancel:closeModal});
 };
 
 if(token)start();
