@@ -156,6 +156,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}},del(k){try{localStorage.removeItem(k)}catch{}}};
 
+const API='https://mk-messages.scratch-2026-10-06-1022eb.workers.dev';
 let token=store.get('mk_token'),me=null,chats=[],users={},cur=null,msgs={},typers={},ws=null,acks={},ackN=0,reply=null,regMode=false,retry=0,filter='',msgFilter='';
 
 // theme
@@ -173,7 +174,7 @@ $('#authForm').onsubmit=async e=>{
  e.preventDefault();
  $('#authErr').textContent='';$('#authBtn').disabled=true;
  try{
-  const r=await fetch(regMode?'/api/register':'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('#aUser').value,password:$('#aPass').value,name:$('#aName').value})});
+  const r=await fetch(API+(regMode?'/api/register':'/api/login'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:$('#aUser').value,password:$('#aPass').value,name:$('#aName').value})});
   const d=await r.json().catch(()=>({error:'Server error'}));
   if(!r.ok||d.error){$('#authErr').textContent=d.error||'Failed';return}
   token=d.token;store.set('mk_token',token);start();
@@ -184,7 +185,7 @@ $('#btnOut').onclick=()=>{store.del('mk_token');token=null;try{ws&&ws.close()}ca
 // ---------- socket ----------
 function start(){$('#auth').classList.add('hidden');$('#app').classList.remove('hidden');connect()}
 function connect(){
- ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/ws?token='+encodeURIComponent(token));
+ ws=new WebSocket(API.replace('https://','wss://')+'/ws?token='+encodeURIComponent(token));
  ws.onopen=()=>{retry=0};
  ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch{return}onEv(m.ev,m.data)};
  ws.onclose=ev=>{
