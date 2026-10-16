@@ -1,0 +1,81 @@
+<div id="auth">
+ <form class="card" id="authForm" autocomplete="on">
+  <h1>MK Messages</h1>
+  <p id="authSub">Sign in to continue</p>
+  <div id="phoneWrap" class="hidden"><label class="l" for="aPhone">Mobile number</label><input type="tel" id="aPhone" autocomplete="tel" inputmode="tel" placeholder="With country code, e.g. 91 98765 43210"></div>
+  <label class="l" for="aUser" id="aUserL">Mobile number or username</label><input type="text" id="aUser" autocomplete="username" maxlength="30">
+  <label class="l" for="aPass">Password</label><input type="password" id="aPass" autocomplete="current-password">
+  <label class="l" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="showPw" style="width:auto"> Show password</label>
+  <div class="err" id="authErr"></div>
+  <button class="btn" id="authBtn" style="width:100%">Sign in</button>
+  <p style="margin:14px 0 0;text-align:center"><button type="button" class="link" id="authSwitch">New here? Create an account</button></p>
+  <p id="authNote" class="hidden" style="font-size:12px;margin-top:10px">Your mobile number identifies your account so people can find and invite you. It is not verified by SMS. Your username is your display name and can be anything.</p>
+ </form>
+</div>
+
+<div id="app" class="hidden">
+ <div id="side">
+  <div class="top">
+   <div class="av" id="meAv" title="Profile"></div>
+   <div class="grow"><b>MK Messages</b></div>
+   <button class="ib" id="btnSideMore" data-i="more" aria-label="Menu"></button>
+  </div>
+  <div id="alertBanner" class="hidden"><span>Turn on alerts so calls ring and messages arrive even when MK Messages is closed.</span><button class="btn" id="alertOn" style="padding:6px 12px">Turn on</button><button class="ib" id="alertX" data-i="x" data-s="16" aria-label="Dismiss"></button></div>
+  <input type="text" id="search" placeholder="Search chats, or find people by number or username">
+  <div id="chatlist"></div>
+ </div>
+ <div id="main">
+  <div id="placeholder"><h2>MK Messages</h2><p>Select a chat, or open the menu to create or join a group.</p></div>
+  <div id="chatpane" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0">
+   <div class="top">
+    <button class="ib back" id="btnBack" data-i="back" aria-label="Back"></button>
+    <div class="av" id="hAv"></div>
+    <div class="grow" id="hInfo" style="cursor:pointer"><b id="hName"></b><div id="hSub" style="font-size:12px;color:var(--sub)"></div></div>
+    <button class="ib" id="btnCallA" data-i="phone" aria-label="Voice call"></button>
+    <button class="ib" id="btnCallV" data-i="video" aria-label="Video call"></button>
+    <button class="ib" id="btnMsgSearch" data-i="search" aria-label="Search in chat"></button>
+    <button class="ib" id="btnMore" data-i="more" aria-label="More"></button>
+   </div>
+   <div id="msgSearchBar" class="top hidden"><input type="text" id="msgSearch" placeholder="Search messages"></div>
+   <div id="callBanner" class="hidden"></div>
+   <div id="msgs"></div>
+   <div id="typing"></div>
+   <div id="replybar" class="hidden"><div class="grow" id="replyText"></div><button class="ib" id="replyX" data-i="x" data-s="18" aria-label="Cancel reply"></button></div>
+   <div id="panel" class="hidden"></div>
+   <div id="composer">
+    <button class="ib" id="btnEmoji" data-i="smile" aria-label="Emoji, stickers and labels"></button>
+    <button class="ib" id="btnAttach" data-i="clip" aria-label="Attach"></button>
+    <input type="file" id="file" class="hidden">
+    <textarea id="input" rows="1" placeholder="Type a message"></textarea>
+    <button class="ib" id="btnMic" data-i="mic" aria-label="Record a voice message"></button>
+    <button class="ib acc hidden" id="btnSend" data-i="send" aria-label="Send"></button>
+   </div>
+   <div id="recbar" class="hidden">
+    <button class="ib" id="rDel" data-i="trash" aria-label="Delete recording"></button>
+    <span class="rd"></span><span class="rt" id="rTime">0:00</span>
+    <canvas id="rWave"></canvas>
+    <button class="ib hidden" id="rPlay" data-i="play" aria-label="Play back"></button>
+    <button class="ib" id="rPause" data-i="pause" aria-label="Pause"></button>
+    <button class="ib acc" id="rSend" data-i="send" aria-label="Send recording"></button>
+   </div>
+  </div>
+ </div>
+</div>
+
+<div id="call" class="hidden">
+ <div class="ctop"><div class="grow"><b id="callTitle"></b></div><span id="callTime">0:00</span></div>
+ <div id="tiles"></div>
+ <div id="ctrls">
+  <button id="cMic" data-i="mic" data-s="24" aria-label="Mute"></button>
+  <button id="cCam" data-i="video" data-s="24" aria-label="Camera"></button>
+  <button id="cFlip" data-i="rotate" data-s="24" aria-label="Switch camera"></button>
+  <button id="cEnd" class="end" data-i="phone" data-s="24" aria-label="Hang up"></button>
+ </div>
+</div>
+<div id="ar" class="hidden">
+ <video id="arVid" autoplay playsinline muted></video><div id="arLayer"></div><div id="arCross"></div>
+ <div id="arTop"><button class="ib" id="arClose" data-i="x" aria-label="Close"></button><div class="grow"><b id="arTitle"></b><div id="arStat" style="font-size:12px;opacity:.85"></div></div></div>
+ <div id="arBot"><button class="btn" id="arPlace">Pin a note</button><button class="btn sec" id="arList" style="background:#fff">Notes</button></div>
+</div>
+<div id="ov" class="hidden"><div class="modal" id="modal"></div></div>
+<div id="toast" class="hidden"></div>

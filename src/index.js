@@ -2,8 +2,11 @@
 // that holds all state and WebSocket connections. Uploaded media is stored in
 // the Durable Object's own storage (chunked), so no R2 bucket is needed.
 // Anyone can create a group (6-digit number) and becomes that group's admin.
-// Anyone with the number can join and chat. Also: calls (WebRTC signaling),
-// scheduled messages and AR pins.
+// Anyone with the code can join and chat. Accounts are keyed by mobile number.
+// Also: calls (WebRTC signaling), scheduled messages, AR pins, invitations,
+// stickers and Web Push so calls ring even when the app is closed.
+
+import { genVapid, sendPush, PUSH_HOST } from './push.js';
 
 const ORIGINS = ['https://rsmohnishkumar-design.github.io', 'https://mk-messages.pages.dev'];
 
@@ -12,7 +15,7 @@ export default {
     const origin = request.headers.get('Origin');
     const cors = origin && ORIGINS.includes(origin) ? {
       'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Filename, X-Mime',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Filename, X-Mime, Range',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Max-Age': '86400',
       Vary: 'Origin',
@@ -36,12 +39,21 @@ const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart
 const rand = (n) => hex(crypto.getRandomValues(new Uint8Array(n)));
 const id = () => rand(8);
 const MAX_MSGS = 1000;
-const CHUNK = 120 * 1024;          // DO storage values are limited to 128 KiB
-const MAX_FILE = 12 * 1024 * 1024; // per upload
+const CHUNK = 120 * 1024;               // DO storage values are limited to 128 KiB
+const PART_CHUNKS = 32;                 // a client upload part = 32 chunks (~3.75 MB)
+const PART_BYTES = CHUNK * PART_CHUNKS;
+const MAX_FILE = 100 * 1024 * 1024;     // per file
+const SEG = 120;                        // messages per storage segment
 const FILE_URL = /^\/api\/file\/[0-9a-f]{32}$/;
 const GIF_HOSTS = /^https:\/\/(media\d*\.giphy\.com|i\.giphy\.com|media\.tenor\.com|c\.tenor\.com)\//;
 const INLINE_TYPES = /^(image\/(png|jpeg|gif|webp|avif)|video\/(mp4|webm|quicktime|ogg)|audio\/(webm|ogg|mpeg|mp4|wav|aac|x-m4a))$/;
 const normName = (v) => String(v || '').trim().replace(/\s+/g, ' ');
+const normPhone = (v) => {
+  let d = String(v || '').replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  return d.length >= 7 && d.length <= 15 ? d : '';
+};
+const looksPhone = (v) => /^[+\d][\d\s\-().+]*$/.test(String(v || '').trim()) && normPhone(v) !== '';
 const num = (v, min, max, def) => { v = +v; return Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : def; };
 function cleanFile(f) {
   if (!f) return null;
@@ -62,30 +74,84 @@ export class Hub {
     this.ctx = ctx;
     this.env = env;
     this.users = {}; this.groups = {}; this.sessions = {}; this.messages = {};
-    this.sched = {}; this.pins = {}; this.calls = {};
+    this.sched = {}; this.pins = {}; this.calls = {}; this.invites = {};
     this.socks = new Map(); // WebSocket -> uid
+    this.vis = new Map();   // WebSocket -> page visible?
+    this.cache = new Map(); // storage key -> last JSON written (change detection)
+    this.vapid = null;
     ctx.blockConcurrencyWhile(async () => {
       const s = ctx.storage;
-      this.users = (await s.get('users')) || {};
-      this.groups = (await s.get('groups')) || {};
-      this.sessions = (await s.get('sessions')) || {};
-      const ms = await s.list({ prefix: 'm:' });
-      for (const [k, v] of ms) this.messages[k.slice(2)] = v;
-      this.sched = (await s.get('sched')) || {};
+      await this.migrate(s);
+      const load = async (prefix, target) => {
+        for (const [k, v] of await s.list({ prefix })) { target[k.slice(prefix.length)] = v; this.cache.set(k, JSON.stringify(v)); }
+      };
+      await load('u:', this.users); await load('g:', this.groups); await load('s:', this.sessions);
+      await load('sc:', this.sched); await load('iv:', this.invites);
       for (const [k, v] of await s.list({ prefix: 'p:' })) this.pins[k.slice(2)] = v;
+      const segs = {};
+      for (const [k, v] of await s.list({ prefix: 'm:' })) {
+        const m = /^m:(.+):(\d+)$/.exec(k);
+        if (m) { (segs[m[1]] = segs[m[1]] || [])[+m[2]] = v; this.cache.set(k, JSON.stringify(v)); }
+        else { this.messages[k.slice(2)] = v; this.legacy = (this.legacy || []).concat(k); }
+      }
+      for (const [cid, arr] of Object.entries(segs)) this.messages[cid] = arr.flat();
+      for (const k of this.legacy || []) { this.saveChat(k.slice(2)); s.delete(k); }
     });
   }
 
+  // one-time move from the old "everything in one key" layout (128 KiB limit) to per-item keys
+  async migrate(s) {
+    for (const [key, prefix] of [['users', 'u:'], ['groups', 'g:'], ['sessions', 's:'], ['sched', 'sc:']]) {
+      const old = await s.get(key);
+      if (!old) continue;
+      const o = {};
+      for (const [k, v] of Object.entries(old)) o[prefix + k] = v;
+      const keys = Object.keys(o);
+      for (let i = 0; i < keys.length; i += 100) await s.put(Object.fromEntries(keys.slice(i, i + 100).map((k) => [k, o[k]])));
+      await s.delete(key);
+    }
+  }
+
   // ---- persistence ----
+  persist(prefix, obj) {
+    const put = {}, del = [];
+    for (const [k, v] of Object.entries(obj)) {
+      const key = prefix + k, js = JSON.stringify(v);
+      if (this.cache.get(key) !== js) { put[key] = v; this.cache.set(key, js); }
+    }
+    for (const key of this.cache.keys()) if (key.startsWith(prefix) && !(key.slice(prefix.length) in obj)) { del.push(key); }
+    del.forEach((k) => this.cache.delete(k));
+    const keys = Object.keys(put);
+    for (let i = 0; i < keys.length; i += 100) this.ctx.storage.put(Object.fromEntries(keys.slice(i, i + 100).map((k) => [k, put[k]])));
+    for (let i = 0; i < del.length; i += 100) this.ctx.storage.delete(del.slice(i, i + 100));
+  }
+  saveChat(cid) {
+    const msgs = this.messages[cid] || [], n = Math.ceil(msgs.length / SEG), o = {};
+    for (let i = 0; i < n; i++) {
+      const key = `m:${cid}:${i}`, part = msgs.slice(i * SEG, (i + 1) * SEG), js = JSON.stringify(part);
+      if (this.cache.get(key) !== js) { o[key] = part; this.cache.set(key, js); }
+    }
+    if (Object.keys(o).length) this.ctx.storage.put(o);
+    const del = [];
+    for (let i = n; this.cache.has(`m:${cid}:${i}`); i++) { del.push(`m:${cid}:${i}`); this.cache.delete(`m:${cid}:${i}`); }
+    if (del.length) this.ctx.storage.delete(del);
+  }
   save(...chatIds) {
-    const o = { users: this.users, groups: this.groups, sessions: this.sessions, sched: this.sched };
-    for (const c of chatIds) if (this.messages[c]) o['m:' + c] = this.messages[c];
-    this.ctx.storage.put(o);
+    this.persist('u:', this.users); this.persist('g:', this.groups); this.persist('s:', this.sessions);
+    this.persist('sc:', this.sched); this.persist('iv:', this.invites);
+    chatIds.forEach((c) => this.saveChat(c));
+  }
+  async getVapid() {
+    if (this.vapid) return this.vapid;
+    this.vapid = await this.ctx.storage.get('vapid');
+    if (!this.vapid) { this.vapid = await genVapid(); await this.ctx.storage.put('vapid', this.vapid); }
+    return this.vapid;
   }
 
   // ---- views ----
   isOnline(uid) { for (const u of this.socks.values()) if (u === uid) return true; return false; }
-  pub(u) { return { id: u.id, username: u.username, name: u.name, about: u.about, avatar: u.avatar, isAdmin: u.isAdmin, online: this.isOnline(u.id), lastSeen: u.lastSeen }; }
+  pub(u) { return { id: u.id, username: u.username, name: u.name, phone: u.phone || null, about: u.about, avatar: u.avatar, online: this.isOnline(u.id), lastSeen: u.lastSeen }; }
+  reachable(uid) { for (const [ws, u] of this.socks) if (u === uid && this.vis.get(ws) !== false) return true; return false; }
   pubUsers(ids) { return ids.map((i) => this.users[i]).filter(Boolean).map((u) => this.pub(u)); }
   slim(m) { return m.deleted ? { ...m, text: '', file: null } : m; }
   chatView(c, uid) {
@@ -139,7 +205,10 @@ export class Hub {
     }
     if (url.pathname === '/api/register' && request.method === 'POST') return this.register(await request.json().catch(() => ({})));
     if (url.pathname === '/api/login' && request.method === 'POST') return this.login(await request.json().catch(() => ({})));
-    if (url.pathname === '/api/upload' && request.method === 'POST') return this.upload(request);
+    if (url.pathname === '/api/push/key' && request.method === 'GET') return json({ key: (await this.getVapid()).pub });
+    if (url.pathname === '/api/upload/start' && request.method === 'POST') return this.uploadStart(request);
+    if (url.pathname === '/api/upload/part' && request.method === 'POST') return this.uploadPart(request, url);
+    if (url.pathname === '/api/upload/finish' && request.method === 'POST') return this.uploadFinish(request);
     if (url.pathname.startsWith('/api/file/') && (request.method === 'GET' || request.method === 'HEAD')) return this.serveFile(request, url.pathname.slice(10));
     return new Response('Not found', { status: 404 });
   }
@@ -152,50 +221,85 @@ export class Hub {
     return token;
   }
   findByName(v) { const k = normName(v).toLowerCase(); return k ? Object.values(this.users).find((u) => u.username.toLowerCase() === k) : null; }
-  async register({ username, password }) {
+  findByPhone(v) { const k = normPhone(v); return k ? Object.values(this.users).find((u) => u.phone === k) : null; }
+  findUser(v) { return looksPhone(v) ? this.findByPhone(v) || this.findByName(v) : this.findByName(v); }
+  async register({ phone, username, password }) {
+    const ph = normPhone(phone);
+    if (!ph) return json({ error: 'Enter your mobile number with country code (7-15 digits)' }, 400);
     const name = normName(username).slice(0, 30);
     if (!name) return json({ error: 'Enter a username' }, 400);
     if (String(password || '').length < 4) return json({ error: 'Password must be at least 4 characters' }, 400);
+    if (this.findByPhone(ph)) return json({ error: 'That mobile number is already registered' }, 400);
     if (this.findByName(name)) return json({ error: 'That username is already taken' }, 400);
-    const first = Object.keys(this.users).length === 0;
-    const u = { id: id(), username: name, name, pw: await hashPw(String(password)), about: 'Hey there! I am using MK Messages', avatar: null, isAdmin: first, lastSeen: Date.now() };
+    const u = { id: id(), username: name, name, phone: ph, pw: await hashPw(String(password)), about: 'Hey there! I am using MK Messages', avatar: null, lastSeen: Date.now(), push: [], stickers: [] };
     this.users[u.id] = u;
     const token = this.newSession(u.id);
     this.save();
     return json({ token, user: this.pub(u) });
   }
-  async login({ username, password }) {
-    const u = this.findByName(username);
-    if (!u || !(await verifyPw(String(password || ''), u.pw))) return json({ error: 'Wrong username or password' }, 400);
+  async login({ ident, username, phone, password }) {
+    const u = this.findUser(ident || phone || username);
+    if (!u || !(await verifyPw(String(password || ''), u.pw))) return json({ error: 'Wrong number, username or password' }, 400);
     const token = this.newSession(u.id);
     this.save();
     return json({ token, user: this.pub(u) });
   }
-  async upload(request) {
-    const uid = this.sessions[(request.headers.get('Authorization') || '').replace('Bearer ', '')];
+  authed(request) { return this.sessions[(request.headers.get('Authorization') || '').replace('Bearer ', '')]; }
+  async uploadStart(request) {
+    const uid = this.authed(request);
     if (!uid) return json({ error: 'Not signed in' }, 401);
-    if ((+request.headers.get('Content-Length') || 0) > MAX_FILE + 1024) return json({ error: 'File too large (max 12 MB)' }, 413);
-    let orig = 'file';
-    try { orig = decodeURIComponent(request.headers.get('X-Filename') || 'file'); } catch {}
-    orig = orig.replace(/[^\w.\- ]/g, '_').slice(0, 80) || 'file';
-    const type = String(request.headers.get('X-Mime') || 'application/octet-stream').split(';')[0].trim().slice(0, 60);
-    const body = await request.arrayBuffer();
-    if (body.byteLength > MAX_FILE) return json({ error: 'File too large (max 12 MB)' }, 413);
-    const fid = rand(16);
-    const chunks = Math.max(1, Math.ceil(body.byteLength / CHUNK));
-    for (let i = 0; i < chunks; i += 32) {
-      const o = {};
-      for (let j = i; j < Math.min(chunks, i + 32); j++) o[`f:${fid}:${j}`] = body.slice(j * CHUNK, (j + 1) * CHUNK);
-      await this.ctx.storage.put(o);
+    const d = await request.json().catch(() => ({}));
+    const size = Math.floor(+d.size);
+    if (!(size > 0)) return json({ error: 'Empty file' }, 400);
+    if (size > MAX_FILE) return json({ error: 'File too large (max 100 MB)' }, 413);
+    let name = normName(d.name || 'file').replace(/[^\w.\- ]/g, '_').slice(0, 80) || 'file';
+    const type = String(d.type || 'application/octet-stream').split(';')[0].trim().slice(0, 60);
+    // drop abandoned uploads older than a day
+    for (const [k, v] of await this.ctx.storage.list({ prefix: 'fu:' })) {
+      if (Date.now() - v.ts > 864e5) this.dropChunks(k.slice(3), v.chunks, k);
     }
-    await this.ctx.storage.put('fm:' + fid, { name: orig, type, size: body.byteLength, chunks, owner: uid, ts: Date.now() });
-    return json({ url: '/api/file/' + fid, name: orig, size: body.byteLength, type });
+    const fid = rand(16), chunks = Math.ceil(size / CHUNK);
+    await this.ctx.storage.put('fu:' + fid, { name, type, size, chunks, owner: uid, ts: Date.now(), parts: [] });
+    return json({ fid, partBytes: PART_BYTES });
+  }
+  dropChunks(fid, chunks, metaKey) {
+    const keys = [metaKey];
+    for (let i = 0; i < chunks; i++) keys.push(`f:${fid}:${i}`);
+    for (let i = 0; i < keys.length; i += 120) this.ctx.storage.delete(keys.slice(i, i + 120));
+  }
+  async uploadPart(request, url) {
+    const uid = this.authed(request);
+    if (!uid) return json({ error: 'Not signed in' }, 401);
+    const fid = url.searchParams.get('fid') || '', n = +url.searchParams.get('n');
+    const meta = /^[0-9a-f]{32}$/.test(fid) ? await this.ctx.storage.get('fu:' + fid) : null;
+    if (!meta || meta.owner !== uid) return json({ error: 'Upload not found' }, 404);
+    const parts = Math.ceil(meta.size / PART_BYTES);
+    if (!Number.isInteger(n) || n < 0 || n >= parts) return json({ error: 'Bad part' }, 400);
+    const want = n === parts - 1 ? meta.size - n * PART_BYTES : PART_BYTES;
+    const body = await request.arrayBuffer();
+    if (body.byteLength !== want) return json({ error: 'Part has the wrong size' }, 400);
+    const base = n * PART_CHUNKS, count = Math.ceil(want / CHUNK), o = {};
+    for (let j = 0; j < count; j++) o[`f:${fid}:${base + j}`] = body.slice(j * CHUNK, (j + 1) * CHUNK);
+    await this.ctx.storage.put(o);
+    if (!meta.parts.includes(n)) { meta.parts.push(n); await this.ctx.storage.put('fu:' + fid, meta); }
+    return json({ ok: true, received: meta.parts.length, parts });
+  }
+  async uploadFinish(request) {
+    const uid = this.authed(request);
+    if (!uid) return json({ error: 'Not signed in' }, 401);
+    const { fid } = await request.json().catch(() => ({}));
+    const meta = /^[0-9a-f]{32}$/.test(String(fid)) ? await this.ctx.storage.get('fu:' + fid) : null;
+    if (!meta || meta.owner !== uid) return json({ error: 'Upload not found' }, 404);
+    if (meta.parts.length !== Math.ceil(meta.size / PART_BYTES)) return json({ error: 'Upload incomplete' }, 400);
+    await this.ctx.storage.put('fm:' + fid, { name: meta.name, type: meta.type, size: meta.size, chunks: meta.chunks, owner: uid, ts: Date.now() });
+    await this.ctx.storage.delete('fu:' + fid);
+    return json({ url: '/api/file/' + fid, name: meta.name, size: meta.size, type: meta.type });
   }
   async serveFile(request, fid) {
     if (!/^[0-9a-f]{32}$/.test(fid)) return new Response('Not found', { status: 404 });
     const meta = await this.ctx.storage.get('fm:' + fid);
     if (!meta) return new Response('Not found', { status: 404 });
-    const size = meta.size;
+    const size = meta.size, storage = this.ctx.storage;
     let start = 0, end = size - 1, status = 200;
     const m = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('Range') || '');
     if (m && (m[1] || m[2])) {
@@ -207,7 +311,7 @@ export class Hub {
     const inline = INLINE_TYPES.test(meta.type);
     const h = {
       'Content-Type': inline ? meta.type : 'application/octet-stream',
-      'Content-Length': String(size ? end - start + 1 : 0),
+      'Content-Length': String(end - start + 1),
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'public, max-age=31536000, immutable',
       'X-Content-Type-Options': 'nosniff',
@@ -216,34 +320,42 @@ export class Hub {
       'Content-Disposition': (inline ? 'inline' : 'attachment') + `; filename="${meta.name}"`,
     };
     if (status === 206) h['Content-Range'] = `bytes ${start}-${end}/${size}`;
-    if (request.method === 'HEAD' || !size) return new Response(null, { status, headers: h });
-    const first = Math.floor(start / CHUNK), last = Math.floor(end / CHUNK);
-    const out = new Uint8Array(end - start + 1);
-    for (let i = first; i <= last; i += 32) {
-      const keys = []; for (let j = i; j <= Math.min(last, i + 31); j++) keys.push(`f:${fid}:${j}`);
-      const got = await this.ctx.storage.get(keys);
-      for (let j = i; j <= Math.min(last, i + 31); j++) {
-        const buf = new Uint8Array(got.get(`f:${fid}:${j}`));
-        const cs = j * CHUNK, from = Math.max(start, cs), to = Math.min(end, cs + buf.length - 1);
-        out.set(buf.subarray(from - cs, to - cs + 1), from - start);
-      }
-    }
-    return new Response(out, { status, headers: h });
+    if (request.method === 'HEAD') return new Response(null, { status, headers: h });
+    let pos = start;
+    const last = Math.floor(end / CHUNK);
+    const body = new ReadableStream({
+      async pull(ctrl) {
+        if (pos > end) { ctrl.close(); return; }
+        const first = Math.floor(pos / CHUNK), keys = [];
+        for (let j = first; j <= Math.min(last, first + 7); j++) keys.push(`f:${fid}:${j}`);
+        const got = await storage.get(keys);
+        for (let j = first; j < first + keys.length; j++) {
+          const buf = new Uint8Array(got.get(`f:${fid}:${j}`)), cs = j * CHUNK;
+          const from = Math.max(pos, cs) - cs, to = Math.min(end, cs + buf.length - 1) - cs;
+          ctrl.enqueue(buf.slice(from, to + 1));
+          pos = cs + to + 1;
+        }
+      },
+    });
+    return new Response(body, { status, headers: h });
+  }
+  fileInUse(url) {
+    for (const list of Object.values(this.messages)) for (const m of list) if (!m.deleted && m.file && m.file.url === url) return true;
+    for (const list of Object.values(this.pins)) for (const p of list) if (p.photo === url) return true;
+    for (const u of Object.values(this.users)) if ((u.stickers || []).some((x) => x.url === url)) return true;
+    return false;
   }
   purgeFile(f) {
-    const mm = f && FILE_URL.test(f.url || '') ? f.url.slice(10) : null;
-    if (!mm) return;
-    this.ctx.storage.get('fm:' + mm).then((meta) => {
-      if (!meta) return;
-      const keys = ['fm:' + mm]; for (let i = 0; i < meta.chunks; i++) keys.push(`f:${mm}:${i}`);
-      for (let i = 0; i < keys.length; i += 120) this.ctx.storage.delete(keys.slice(i, i + 120));
-    }).catch(() => {});
+    const url = f && f.url;
+    if (!url || !FILE_URL.test(url) || this.fileInUse(url)) return;
+    const fid = url.slice(10);
+    this.ctx.storage.get('fm:' + fid).then((meta) => { if (meta) this.dropChunks(fid, meta.chunks, 'fm:' + fid); }).catch(() => {});
   }
 
   // ---- WebSocket ----
   onConnect(ws, uid) {
     this.socks.set(ws, uid);
-    this.send(ws, 'init', { me: this.pub(this.users[uid]), chats: this.chatsFor(uid), users: this.pubUsers(this.allMemberIds(uid)), calls: this.callsFor(uid) });
+    this.send(ws, 'init', { me: this.pub(this.users[uid]), chats: this.chatsFor(uid), users: this.pubUsers(this.allMemberIds(uid)), calls: this.callsFor(uid), invites: this.invitesFor(uid), stickers: this.users[uid].stickers || [] });
     this.toAll('presence', { id: uid, online: true });
     ws.addEventListener('message', async (e) => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -255,6 +367,7 @@ export class Hub {
     });
     const gone = () => {
       if (!this.socks.delete(ws)) return;
+      this.vis.delete(ws);
       if (!this.isOnline(uid)) {
         this.leaveCalls(uid);
         this.users[uid].lastSeen = Date.now();
@@ -279,15 +392,21 @@ export class Hub {
     let rp = null;
     if (replyTo) {
       const o = list.find((m) => m.id === replyTo);
-      if (o) rp = { id: o.id, from: o.from, text: o.deleted ? 'Message deleted' : o.text || (o.file ? '📎 ' + o.file.name : '') };
+      if (o) rp = { id: o.id, from: o.from, text: o.deleted ? 'Message deleted' : o.text || (o.file ? 'Attachment: ' + o.file.name : '') };
     }
     const m = { id: id(), chat, from: uid, text, ts: Date.now(), file: file || null, replyTo: rp, forwarded: !!forwarded, reactions: {}, readBy: [uid], deliveredTo: [uid], starredBy: [] };
     c.members.forEach((mm) => { if (mm !== uid && this.isOnline(mm)) m.deliveredTo.push(mm); });
     list.push(m);
     if (list.length > MAX_MSGS) list.splice(0, list.length - MAX_MSGS).forEach((x) => this.purgeFile(x.file));
-    this.save(chat);
+    this.saveChat(chat);
     this.toChat(chat, 'message', m);
     c.members.forEach((mm) => this.sendChats(mm));
+    const sender = this.users[uid];
+    const body = (c.type === 'group' ? sender.name + ': ' : '') + (text.trim() ? text.trim().slice(0, 120) : 'Sent an attachment');
+    c.members.forEach((mm) => {
+      if (mm === uid || this.reachable(mm) || (c.mutedBy || []).includes(mm)) return;
+      this.pushTo(mm, { t: 'msg', chat, title: c.type === 'group' ? c.name : sender.name, body });
+    });
     return { ok: true, m };
   }
 
@@ -324,13 +443,42 @@ export class Hub {
     if (!call.users.length) {
       delete this.calls[cid];
       const mins = Math.max(1, Math.round((Date.now() - call.started) / 60000));
-      this.addSystem(cid, `Call ended · ${mins} min`);
-      this.save(cid);
+      this.addSystem(cid, `Call ended after ${mins} min`);
+      this.saveChat(cid);
+      const g0 = this.groups[cid];
+      if (g0) g0.members.forEach((m) => this.pushTo(m, { t: 'call-end', chat: cid }, { ttl: 30, urgency: 'high' }));
     }
     const g = this.groups[cid];
     if (g) g.members.forEach((m) => this.toUser(m, 'call:state', { chat: cid, call: this.callView(this.calls[cid]) }));
   }
   leaveCalls(uid) { for (const cid of Object.keys(this.calls)) this.leaveCall(uid, cid); }
+
+  // ---- web push (rings / notifies people whose app is closed or in the background) ----
+  pushTo(uid, payload, opts) {
+    const u = this.users[uid];
+    if (!u || !(u.push || []).length) return;
+    this.ctx.waitUntil((async () => {
+      const vapid = await this.getVapid();
+      const dead = [];
+      await Promise.all(u.push.map(async (sub) => {
+        try { const st = await sendPush(vapid, sub, payload, opts); if (st === 404 || st === 410) dead.push(sub.endpoint); } catch {}
+      }));
+      if (dead.length) { u.push = u.push.filter((x) => !dead.includes(x.endpoint)); this.save(); }
+    })());
+  }
+  joinGroup(uid, g, how) {
+    if (g.members.includes(uid)) return false;
+    g.members.push(uid);
+    this.addSystem(g.id, `${this.users[uid].name} ${how}`);
+    this.save(g.id);
+    this.refreshAll(g);
+    return true;
+  }
+  inviteView(iv) {
+    const g = this.groups[iv.chat], from = this.users[iv.from];
+    return { id: iv.id, chat: iv.chat, chatName: g ? g.name : '', from: iv.from, fromName: from ? from.name : 'Someone', ts: iv.ts };
+  }
+  invitesFor(uid) { return Object.values(this.invites).filter((i) => i.to === uid && this.groups[i.chat]).map((i) => this.inviteView(i)); }
 
   chatOf(uid, cid) { const c = this.groups[cid]; return c && c.members.includes(uid) ? c : null; }
   canManage(c, me) { return c.admin === me.id; }
@@ -352,10 +500,7 @@ export class Hub {
         const g = Object.values(this.groups).find((x) => x.type === 'group' && x.number === String(number || '').trim());
         if (!g) return cb({ error: 'No group with that number' });
         if (g.members.includes(uid)) return cb({ ok: true, chat: this.chatView(g, uid), already: true });
-        g.members.push(uid);
-        this.addSystem(g.id, `${me.name} joined using the group number`);
-        this.save(g.id);
-        this.refreshAll(g);
+        this.joinGroup(uid, g, 'joined using the group code');
         cb({ ok: true, chat: this.chatView(g, uid) });
       },
       'group:leave'({ uid, me }, { chat }, cb) {
@@ -402,19 +547,20 @@ export class Hub {
         const g = this.chatOf(uid, chat);
         if (!g || !this.canManage(g, me)) return cb({ error: 'Admin only' });
         const members = g.members.slice();
-        (this.messages[g.id] || []).forEach((x) => this.purgeFile(x.file));
-        (this.pins[g.id] || []).forEach((x) => this.purgeFile(x.photo && { url: x.photo }));
+        const gone = [...(this.messages[g.id] || []).map((x) => x.file), ...(this.pins[g.id] || []).map((x) => x.photo && { url: x.photo })];
         delete this.pins[g.id]; this.ctx.storage.delete('p:' + g.id); delete this.calls[g.id];
+        Object.keys(this.invites).forEach((k) => { if (this.invites[k].chat === g.id) delete this.invites[k]; });
         Object.keys(this.sched).forEach((k) => { if (this.sched[k].chat === g.id) delete this.sched[k]; });
         delete this.groups[g.id];
         delete this.messages[g.id];
-        this.ctx.storage.delete('m:' + g.id);
+        this.saveChat(g.id);
         this.save();
+        gone.forEach((f) => this.purgeFile(f));
         members.forEach((m) => { this.toUser(m, 'chat:deleted', g.id); this.sendChats(m); });
         cb({ ok: true });
       },
-      'dm:open'({ uid }, { username }, cb) {
-        const other = this.findByName(username);
+      'dm:open'({ uid }, { username, user }, cb) {
+        const other = user ? this.users[user] : this.findUser(username);
         if (!other || other.id === uid) return cb({ error: 'User not found' });
         const cid = 'dm_' + [uid, other.id].sort().join('_');
         let c = this.groups[cid];
@@ -435,7 +581,7 @@ export class Hub {
         const m = this.chatOf(uid, chat) && this.findMsg(chat, mid);
         if (!m || m.from !== uid || m.deleted) return;
         m.text = String(text || '').slice(0, 4000); m.edited = true;
-        this.save(chat);
+        this.saveChat(chat);
         this.toChat(chat, 'message:update', { chat, id: mid, text: m.text, edited: true });
       },
       'message:delete'({ uid, me }, { chat, id: mid, everyone }) {
@@ -443,13 +589,14 @@ export class Hub {
         const m = c && this.findMsg(chat, mid);
         if (!m) return;
         if (everyone && (m.from === uid || this.canManage(c, me))) {
-          this.purgeFile(m.file);
+          const oldFile = m.file;
           m.deleted = true; m.text = ''; m.file = null;
-          this.save(chat);
+          this.purgeFile(oldFile);
+          this.saveChat(chat);
           this.toChat(chat, 'message:update', { chat, id: mid, deleted: true, text: '', file: null });
         } else {
           (m.deletedFor = m.deletedFor || []).push(uid);
-          this.save(chat);
+          this.saveChat(chat);
           this.toUser(uid, 'message:remove', { chat, id: mid });
         }
         c.members.forEach((mm) => this.sendChats(mm));
@@ -463,7 +610,7 @@ export class Hub {
           if (!m.reactions[e].length) delete m.reactions[e];
         }
         if (emoji) (m.reactions[emoji] = m.reactions[emoji] || []).push(uid);
-        this.save(chat);
+        this.saveChat(chat);
         this.toChat(chat, 'message:update', { chat, id: mid, reactions: m.reactions });
       },
       'message:star'({ uid }, { chat, id: mid }) {
@@ -471,14 +618,14 @@ export class Hub {
         if (!m) return;
         const s = m.starredBy || [];
         m.starredBy = s.includes(uid) ? s.filter((u) => u !== uid) : [...s, uid];
-        this.save(chat);
+        this.saveChat(chat);
         this.toUser(uid, 'message:update', { chat, id: mid, starredBy: m.starredBy });
       },
       'chat:read'({ uid }, { chat }) {
         if (!this.chatOf(uid, chat)) return;
         let changed = false;
         for (const m of this.messages[chat] || []) if (!m.system && !m.readBy.includes(uid)) { m.readBy.push(uid); changed = true; }
-        if (changed) { this.save(chat); this.toChat(chat, 'chat:read', { chat, user: uid }); this.sendChats(uid); }
+        if (changed) { this.saveChat(chat); this.toChat(chat, 'chat:read', { chat, user: uid }); this.sendChats(uid); }
       },
       'chat:pref'({ uid }, { chat, pinned, muted }) {
         const c = this.chatOf(uid, chat); if (!c) return;
@@ -491,13 +638,19 @@ export class Hub {
       'chat:clear'({ uid }, { chat }) {
         if (!this.chatOf(uid, chat)) return;
         for (const m of this.messages[chat] || []) (m.deletedFor = m.deletedFor || []).push(uid);
-        this.save(chat);
+        this.saveChat(chat);
         this.sendChats(uid);
       },
       typing({ ws, uid, me }, { chat, typing }) {
         if (this.chatOf(uid, chat)) this.toChat(chat, 'typing', { chat, user: uid, name: me.name, typing: !!typing }, ws);
       },
-      'profile:update'({ uid, me }, { name, about, avatar }, cb) {
+      'profile:update'({ uid, me }, { name, about, avatar, phone }, cb) {
+        if (phone !== undefined && normPhone(phone) !== (me.phone || '')) {
+          const ph = normPhone(phone), clash = ph && this.findByPhone(ph);
+          if (!ph) return cb({ error: 'Enter your mobile number with country code (7-15 digits)' });
+          if (clash && clash.id !== uid) return cb({ error: 'That mobile number is already registered' });
+          me.phone = ph;
+        }
         if (name && normName(name) !== me.name) {
           const nn = normName(name).slice(0, 30), clash = this.findByName(nn);
           if (!nn || (clash && clash.id !== uid)) return cb({ error: 'That username is already taken' });
@@ -547,9 +700,13 @@ export class Hub {
         const others = call.users.slice();
         call.users.push(uid);
         if (fresh) {
-          this.addSystem(chat, `📞 ${me.name} started a ${call.video ? 'video' : 'voice'} call`);
-          this.save(chat);
-          c.members.forEach((m) => { if (m !== uid) this.toUser(m, 'call:ring', { chat, from: uid, video: call.video, id: call.id }); });
+          this.addSystem(chat, `${me.name} started a ${call.video ? 'video' : 'voice'} call`);
+          this.saveChat(chat);
+          c.members.forEach((m) => {
+            if (m === uid) return;
+            this.toUser(m, 'call:ring', { chat, from: uid, video: call.video, id: call.id });
+            this.pushTo(m, { t: 'call', chat, from: me.name, video: call.video, title: c.type === 'group' ? c.name : me.name }, { ttl: 45, urgency: 'high' });
+          });
         } else others.forEach((u) => this.toUser(u, 'call:joined', { chat, user: uid }));
         c.members.forEach((m) => this.toUser(m, 'call:state', { chat, call: this.callView(call) }));
         cb({ ok: true, call: { id: call.id, video: call.video, users: others } });
@@ -559,12 +716,6 @@ export class Hub {
         const call = this.calls[chat];
         if (!call || !call.users.includes(uid) || !call.users.includes(to) || !data) return;
         this.toUser(to, 'call:signal', { chat, from: uid, data });
-      },
-      'call:annot'({ uid }, { chat, target, x, y, text, aid }) {
-        const call = this.calls[chat];
-        if (!call || !call.users.includes(uid)) return;
-        const d = { chat, from: uid, target: String(target || ''), x: num(x, 0, 1, 0.5), y: num(y, 0, 1, 0.5), text: String(text || '').slice(0, 120), aid: String(aid || id()).slice(0, 24) };
-        call.users.forEach((u) => { if (u !== uid) this.toUser(u, 'call:annot', d); });
       },
       'pin:list'({ uid }, { chat }, cb) {
         if (!this.chatOf(uid, chat)) return cb({ error: 'Not a member' });
@@ -577,7 +728,7 @@ export class Hub {
         if (!text) return cb({ error: 'Write a note first' });
         if (!Number.isFinite(+d.lat) || !Number.isFinite(+d.lng)) return cb({ error: 'Location not available yet' });
         const photo = d.photo && FILE_URL.test(String(d.photo)) ? String(d.photo) : null;
-        const pin = { id: id(), chat: d.chat, from: uid, text, emoji: String(d.emoji || '📌').slice(0, 8),
+        const pin = { id: id(), chat: d.chat, from: uid, text, emoji: String(d.emoji || 'yellow').slice(0, 8),
           lat: num(d.lat, -90, 90, 0), lng: num(d.lng, -180, 180, 0), acc: num(d.acc, 0, 100000, 0),
           heading: num(d.heading, 0, 360, 0), pitch: num(d.pitch, -90, 90, 0), dist: num(d.dist, 0.3, 15, 2), photo, ts: Date.now() };
         const list = (this.pins[d.chat] = this.pins[d.chat] || []);
@@ -598,6 +749,69 @@ export class Hub {
         this.toChat(chat, 'pin:removed', { chat, id: pid });
         cb({ ok: true });
       },
+      'user:find'({ uid }, { q }, cb) {
+        const u = this.findUser(q);
+        cb({ users: u && u.id !== uid ? [this.pub(u)] : [] });
+      },
+      'invite:send'({ uid, me }, { chat, user }, cb) {
+        const c = this.chatOf(uid, chat), target = this.users[user];
+        if (!c || c.type !== 'group') return cb({ error: 'Open a group first' });
+        if (!target) return cb({ error: 'User not found' });
+        if (c.members.includes(target.id)) return cb({ error: target.name + ' is already in this group' });
+        const mine = Object.values(this.invites);
+        if (mine.some((i) => i.chat === chat && i.to === target.id)) return cb({ error: 'Already invited' });
+        if (mine.filter((i) => i.to === target.id).length >= 20) return cb({ error: 'That person has too many pending invitations' });
+        const iv = { id: id(), chat, from: uid, to: target.id, ts: Date.now() };
+        this.invites[iv.id] = iv;
+        this.save();
+        this.toUser(target.id, 'invite', this.inviteView(iv));
+        if (!this.reachable(target.id)) this.pushTo(target.id, { t: 'invite', title: 'Group invitation', body: me.name + ' invited you to join ' + c.name });
+        cb({ ok: true, name: target.name });
+      },
+      'invite:accept'({ uid }, { id: iid }, cb) {
+        const iv = this.invites[iid];
+        if (!iv || iv.to !== uid) return cb({ error: 'Invitation not found' });
+        const g = this.groups[iv.chat];
+        delete this.invites[iid];
+        if (!g) { this.save(); return cb({ error: 'That group no longer exists' }); }
+        this.joinGroup(uid, g, 'joined by invitation');
+        cb({ ok: true, chat: this.chatView(g, uid) });
+      },
+      'invite:decline'({ uid }, { id: iid }, cb) {
+        const iv = this.invites[iid];
+        if (iv && iv.to === uid) { delete this.invites[iid]; this.save(); }
+        cb({ ok: true });
+      },
+      'sticker:add'({ uid, me }, { file }, cb) {
+        const f = cleanFile(file);
+        if (!f || !/^image\//.test(f.type)) return cb({ error: 'Stickers must be images or GIFs' });
+        me.stickers = me.stickers || [];
+        if (me.stickers.some((x) => x.url === f.url)) return cb({ ok: true, stickers: me.stickers });
+        if (me.stickers.length >= 60) return cb({ error: 'Sticker library is full (60)' });
+        me.stickers.push(f);
+        this.save();
+        cb({ ok: true, stickers: me.stickers });
+      },
+      'sticker:remove'({ uid, me }, { url }, cb) {
+        me.stickers = (me.stickers || []).filter((x) => x.url !== url);
+        this.save();
+        this.purgeFile({ url });
+        cb({ ok: true, stickers: me.stickers });
+      },
+      'push:subscribe'({ me }, { sub }, cb) {
+        if (!sub || !PUSH_HOST.test(String(sub.endpoint)) || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) return cb({ error: 'Unsupported push service' });
+        me.push = (me.push || []).filter((x) => x.endpoint !== sub.endpoint);
+        me.push.push({ endpoint: String(sub.endpoint), p256dh: String(sub.keys.p256dh), auth: String(sub.keys.auth), ts: Date.now() });
+        if (me.push.length > 6) me.push.shift();
+        this.save();
+        cb({ ok: true });
+      },
+      'push:unsubscribe'({ me }, { endpoint }, cb) {
+        me.push = (me.push || []).filter((x) => x.endpoint !== endpoint);
+        this.save();
+        cb({ ok: true });
+      },
+      'app:vis'({ ws }, { v }) { this.vis.set(ws, !!v); },
       'users:lookup'({ ws, uid }, { ids }) {
         const allowed = new Set(this.allMemberIds(uid));
         this.send(ws, 'users', this.pubUsers((ids || []).filter((i) => allowed.has(i))));
