@@ -3022,11 +3022,13 @@ function origamiCrane(cx,cy,tx,ty,done){
  const NS='http://www.w3.org/2000/svg',T=[0,-50],R=[50,0],B=[0,50],L=[-50,0],Cl=[-29.29,-20.71],Cr=[29.29,-20.71],Cm=[0,-20.71];
  const rf=(p,a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1],t=((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy),fx=a[0]+t*dx,fy=a[1]+t*dy;return[2*fx-p[0],2*fy-p[1]]};
  const S0=[[B,L,Cl],[B,R,Cr],[T,Cl,Cm],[T,Cr,Cm],[Cl,B,Cm],[Cr,B,Cm]];
+ const cen=f=>{const c=[(f[0][0]+f[1][0]+f[2][0])/3,(f[0][1]+f[1][1]+f[2][1])/3];return [c,c,c]};
  const S1=S0.map((f,i)=>i===0?f.map(p=>rf(p,B,Cl)):i===1?f.map(p=>rf(p,B,Cr)):f);
  const S2=S1.map((f,i)=>i===2||i===3?f.map(p=>rf(p,Cl,Cr)):f);
- const S3=[[[-6,-2],[-26,-36],[10,-6]],[[2,-4],[20,-40],[16,-2]],[[-16,4],[14,-8],[4,18]],[[4,18],[14,-8],[24,6]],[[14,-8],[38,-34],[22,-2]],[[-16,4],[-44,16],[-4,14]]];
- const FLAP=[[[-6,-2],[-30,10],[10,-6]],[[2,-4],[34,4],[16,-2]]];
- const front=[59,130,246],back=[207,224,255],crane=[[156,194,255],[100,160,255],[47,111,224],[74,141,245],[91,154,255],[43,99,201]];
+ const S3=[[[-6,-2],[-26,-36],[10,-6]],[[0,-2],[26,-42],[18,0]],[[-16,4],[14,-8],[4,18]],[[4,18],[14,-8],[24,6]],[[14,-8],[34,-33],[22,-2]],[[-16,4],[-44,16],[-4,14]],
+  [[32,-38],[42,-38],[34,-27]],[[42,-38],[52,-31],[36,-32]],[[-44,16],[-50,8],[-34,11]],[[-26,-36],[-35,-28],[-17,-22]],[[0,-2],[18,0],[9,10]],[[-16,4],[14,-8],[-2,-5]],[[14,-8],[22,-2],[17,7]]];
+ for(let i=6;i<13;i++){const c=cen(S3[i]);S0.push(c);S1.push(c);S2.push(c)}
+ const front=[59,130,246],back=[207,224,255],crane=[[150,192,255],[104,164,255],[44,104,214],[66,132,236],[88,150,250],[40,94,196],[70,128,230],[255,196,92],[30,80,170],[184,214,255],[140,186,255],[120,170,250],[196,220,255]];
  const flipAt=[null,[0,1],[2,3]];
  const mix=(a,b,u)=>a.map((v,i)=>v+(b[i]-v)*u),rgb=c=>`rgb(${c.map(Math.round)})`;
  const lerpF=(A,B2,u)=>A.map((f,i)=>f.map((p,j)=>[p[0]+(B2[i][j][0]-p[0])*u,p[1]+(B2[i][j][1]-p[1])*u]));
@@ -3034,7 +3036,9 @@ function origamiCrane(cx,cy,tx,ty,done){
  const svg=document.createElementNS(NS,'svg');
  svg.setAttribute('viewBox','-60 -60 120 120');svg.setAttribute('width',240);svg.setAttribute('height',240);
  svg.style.cssText=`position:fixed;left:${cx-120}px;top:${cy-120}px;z-index:61;pointer-events:none;overflow:visible;filter:drop-shadow(0 6px 8px rgba(0,0,0,.35))`;
- const polys=S0.map(()=>{const e=document.createElementNS(NS,'polygon');e.setAttribute('stroke','rgba(255,255,255,.7)');e.setAttribute('stroke-width','.5');e.setAttribute('stroke-linejoin','round');return e});[2,3,4,5,0,1].forEach(i=>svg.appendChild(polys[i]));
+ const polys=S0.map(()=>{const e=document.createElementNS(NS,'polygon');e.setAttribute('stroke','rgba(255,255,255,.7)');e.setAttribute('stroke-width','.5');e.setAttribute('stroke-linejoin','round');return e});const setOrder=o=>o.forEach(i=>svg.appendChild(polys[i]));setOrder([2,3,4,5,11,12,6,7,8,9,10,0,1]);
+ const eye=document.createElementNS(NS,'circle');eye.setAttribute('r','1.1');eye.setAttribute('fill','#0b1d44');eye.setAttribute('opacity',0);svg.appendChild(eye);
+ let ordered=false;
  document.body.appendChild(svg);
  const colorOf=(i,step,u)=>{ // step 0: S0->S1, 1: S1->S2, 2: S2->S3
   const flipped=(st)=>(st>=1&&i<2)||(st>=2&&(i===2||i===3));
@@ -3043,7 +3047,8 @@ function origamiCrane(cx,cy,tx,ty,done){
   else base=mix(flipped(2)?back:front,crane[i],u);
   return base;
  };
- const draw=(fs,step,u)=>fs.forEach((f,i)=>{polys[i].setAttribute('points',f.map(p=>p.join(',')).join(' '));polys[i].setAttribute('fill',rgb(colorOf(i,step,u)))});
+ const draw=(fs,step,u)=>{if(step===2&&!ordered){ordered=true;setOrder([0,9,5,2,3,11,12,4,6,7,8,1,10]);svg.appendChild(eye)}eye.setAttribute('opacity',step<2?0:Math.max(0,(u-.6)/.4));eye.setAttribute('cx',fs[6][0][0]+3);eye.setAttribute('cy',fs[6][0][1]+4.2);drawF(fs,step,u)};
+ const drawF=(fs,step,u)=>fs.forEach((f,i)=>{polys[i].setAttribute('points',f.map(p=>p.join(',')).join(' '));polys[i].setAttribute('fill',rgb(colorOf(i,step,u)));if(i>=6){const o=step<2?0:Math.max(0,(u-.35)/.65);polys[i].setAttribute('opacity',o);polys[i].setAttribute('stroke-opacity',o)}});
  const steps=[[S0,S1,850],[S1,S1,200],[S1,S2,850],[S2,S2,200],[S2,S3,1000]],stepIdx=[0,0,1,1,2];
  const flyMs=1700,sx=tx<cx?-1:1,mid=[(cx+tx)/2,Math.min(cy,ty)-160];
  let seg=0,t0=performance.now();
@@ -3063,7 +3068,8 @@ function origamiCrane(cx,cy,tx,ty,done){
    const x=m*m*cx+2*m*u*mid[0]+u*u*tx,y=m*m*cy+2*m*u*mid[1]+u*u*ty;
    const dx=2*m*(mid[0]-cx)+2*u*(tx-mid[0]),dy=2*m*(mid[1]-cy)+2*u*(ty-mid[1]);
    const w=(1+Math.sin(fe/70))/2;
-   draw(S3.map((f,i)=>i<2?f.map((p,j)=>[p[0]+(FLAP[i][j][0]-p[0])*w,p[1]+(FLAP[i][j][1]-p[1])*w]):f),2,1);
+   const rot=(f,a)=>{const c=Math.cos(a),n=Math.sin(a);return f.map(p=>{const x=p[0]-0,y=p[1]+3;return[x*c-y*n,x*n+y*c-3]})};
+   draw(S3.map((f,i)=>i===0||i===9?rot(f,-1.4*w):i===1||i===10?rot(f,1.15*w):f),2,1);
    const bank=Math.max(-25,Math.min(25,Math.atan2(dy,dx*sx)*57.3*.35*sx));
    svg.style.transform=`translate(${x-cx}px,${y-cy}px) scale(${sx*(.75-.58*u)},${.75-.58*u}) rotate(${sx*bank}deg)`;
    return requestAnimationFrame(tick);
