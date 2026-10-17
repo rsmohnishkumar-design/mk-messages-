@@ -314,8 +314,60 @@ function renderHeader(){
  $('#hAv').outerHTML=av.replace('class="av ','id="hAv" class="av ');
  $('#hName').textContent=title(c);
  $('#hSub').dataset.base=c.type==='group'?c.members.length+' members, '+c.members.filter(id=>(users[id]||{}).online).length+' online'+(c.onlyAdminPosts?' · only admins can post':'')+(c.ttl?' · disappearing messages on':''):lastSeen(other(c))+(c.ttl?' · disappearing messages on':'');
+ renderLock(c);
  renderTyping();
 }
+// ---- admins-only groups: replace the type bar with a notice; the admin list folds into a bird and perches in the header ----
+const BIRD='<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M2 8l7 2 3-6 2 5 8-3-6 8 2 7-7-4-3 4-1-6z" opacity=".95"/><path d="M9 10l3 4 2-5z" opacity=".55"/></svg>';
+const birdPerched={};
+function renderLock(c){
+ const locked=c.type==='group'&&c.onlyAdminPosts&&c.admin!==me.id&&!(c.admins||[]).includes(me.id);
+ $('#chatpane').classList.toggle('locked',locked);
+ $('#adminOnly').classList.toggle('hidden',!locked);
+ const bird=$('#adminBird'),show=c.type==='group'&&c.onlyAdminPosts&&birdPerched[c.id];
+ bird.classList.toggle('hidden',!show);if(show)bird.innerHTML=BIRD;
+ if(!locked&&!c.onlyAdminPosts)document.querySelectorAll('.adminCard').forEach(e=>e.remove());
+}
+function adminCardHtml(c){
+ const ids=[c.admin,...(c.admins||[])].filter((x,i,a)=>x&&a.indexOf(x)===i);
+ return '<h4>Group admins</h4>'+ids.map(id=>{const u=users[id]||{name:'Unknown'};return `<div class="admrow">${avHtml(u.name,u.avatar,u.online,'sm')}<span>${esc(u.name)}</span>${id===c.admin?'<small>owner</small>':''}</div>`}).join('');
+}
+function openAdminList(){
+ const c=chatById(cur);if(!c||document.querySelector('.adminCard'))return;
+ const card=document.createElement('div');card.className='adminCard';
+ card.innerHTML='<div class="adminIn">'+adminCardHtml(c)+'</div>';
+ document.body.appendChild(card);
+ card.animate([{transform:'translate(-50%,-40%) scale(.8)',opacity:0},{transform:'translate(-50%,-50%) scale(1)',opacity:1}],{duration:220,easing:'ease-out',fill:'forwards'});
+ const fold=()=>{
+  card.onclick=null;document.removeEventListener('pointerdown',away,true);
+  const tgt=$('#hInfo').getBoundingClientRect(),r=card.getBoundingClientRect();
+  const tx=tgt.left+22-(r.left+r.width/2),ty=tgt.top+tgt.height/2-(r.top+r.height/2);
+  const rect='polygon(0% 0%,50% 0%,100% 0%,100% 50%,100% 100%,50% 100%,0% 100%,0% 50%)';
+  const crease='polygon(0% 40%,35% 30%,50% 0%,62% 28%,100% 10%,78% 60%,90% 100%,45% 78%)';
+  const bird='polygon(0% 40%,35% 30%,50% 0%,62% 28%,100% 10%,78% 60%,90% 100%,45% 78%)';
+  card.querySelector('.adminIn').animate([{opacity:1},{opacity:0}],{duration:350,fill:'forwards'});
+  card.animate([
+   {clipPath:rect,transform:'translate(-50%,-50%) rotateX(0) rotateY(0) scale(1)',background:'var(--panel)'},
+   {clipPath:crease,transform:'translate(-50%,-50%) rotateX(35deg) rotateY(-25deg) scale(.7)',background:'var(--accent2)',offset:.35},
+   {clipPath:bird,transform:'translate(-50%,-50%) rotateX(0) rotateY(0) scale(.35)',background:'var(--accent)',offset:.6}
+  ],{duration:900,easing:'ease-in-out',fill:'forwards'}).onfinish=()=>{
+   card.animate([
+    {clipPath:bird,transform:'translate(-50%,-50%) scale(.35) rotate(0)',offset:0},
+    {clipPath:bird,transform:`translate(calc(-50% + ${tx*.5}px),calc(-50% + ${ty*.5-120}px)) scale(.3) rotate(-12deg)`,offset:.55},
+    {clipPath:bird,transform:`translate(calc(-50% + ${tx}px),calc(-50% + ${ty}px)) scale(.12) rotate(6deg)`,offset:1}
+   ],{duration:900,easing:'cubic-bezier(.4,0,.2,1)',fill:'forwards'}).onfinish=()=>{
+    card.remove();birdPerched[c.id]=true;renderLock(c);
+    $('#adminBird').animate([{transform:'translateY(-8px) scale(.6)'},{transform:'translateY(0) scale(1.15)'},{transform:'scale(1)'}],{duration:350});
+   };
+  };
+ };
+ const away=e=>{if(!card.contains(e.target))fold()};
+ setTimeout(()=>document.addEventListener('pointerdown',away,true),50);
+ card.onclick=fold;
+}
+$('#adminsLink').onclick=openAdminList;
+$('#adminsLink').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openAdminList()}};
+$('#adminBird').onclick=()=>{const c=chatById(cur);if(!c)return;birdPerched[c.id]=false;renderLock(c);openAdminList()};
 function renderTyping(){
  const names=Object.keys(typers).filter(k=>k.startsWith(cur+':')&&!k.endsWith('n')).map(k=>typers[k+'n']);
  $('#typing').textContent=names.length?names.join(', ')+(names.length>1?' are':' is')+' typing…':'';
