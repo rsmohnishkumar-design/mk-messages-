@@ -65,15 +65,19 @@
 </div>
 
 <div id="call" class="hidden">
- <div class="ctop"><div class="grow"><b id="callTitle"></b></div><span id="callTime">0:00</span></div>
+ <div class="ctop"><button class="ib" id="cMin" data-i="chevron" data-s="26" aria-label="Minimise call" style="color:#fff"></button><div class="grow"><b id="callTitle"></b></div><span id="callTime">0:00</span></div>
  <div id="tiles"></div>
  <div id="ctrls">
   <button id="cMic" data-i="mic" data-s="24" aria-label="Mute"></button>
   <button id="cCam" data-i="video" data-s="24" aria-label="Camera"></button>
   <button id="cFlip" data-i="rotate" data-s="24" aria-label="Switch camera"></button>
+  <button id="cPip" class="hidden" data-i="pip" data-s="24" aria-label="Picture in picture"></button>
+  <button id="cShare" class="hidden" data-i="screen" data-s="24" aria-label="Share screen"></button>
   <button id="cEnd" class="end" data-i="phone" data-s="24" aria-label="Hang up"></button>
  </div>
 </div>
+<button id="callPill" class="hidden"><span class="dotr"></span><span id="pillName">In call</span><b id="pillT">0:00</b><span>Tap to return</span></button>
+<div id="scan" class="hidden"><video id="scanVid" autoplay playsinline muted></video><div class="scanBox"></div><div class="lbtop" style="position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;padding:10px 14px;background:linear-gradient(#000a,#0000)"><span>Point the camera at a group QR code</span><span style="flex:1"></span><button class="ib" id="scanX" data-i="x" aria-label="Close" style="color:#fff"></button></div></div>
 <div id="ar" class="hidden">
  <video id="arVid" autoplay playsinline muted></video><div id="arLayer"></div><div id="arCross"></div>
  <div id="arTop"><button class="ib" id="arClose" data-i="x" aria-label="Close"></button><div class="grow"><b id="arTitle"></b><div id="arStat" style="font-size:12px;opacity:.85"></div></div></div>
@@ -89,6 +93,7 @@
  <div class="card" style="text-align:center"><h1>MK Messages</h1><p id="lockMsg">Enter your PIN to unlock</p>
   <input type="password" id="lockPin" inputmode="numeric" maxlength="8" autocomplete="off" style="text-align:center;font-size:24px;letter-spacing:6px">
   <div class="err" id="lockErr"></div><button class="btn" id="lockGo" style="width:100%">Unlock</button>
+  <button class="btn sec hidden" id="lockBio" style="width:100%;margin-top:8px">Use fingerprint or screen lock</button>
   <p style="margin-top:12px"><button class="link" id="lockOut">Forgot PIN? Log out</button></p></div>
 </div>
 <div id="ov" class="hidden"><div class="modal" id="modal"></div></div>

@@ -1,6 +1,6 @@
 // ---------- modal helpers ----------
-function modal(html){$('#modal').innerHTML=html;hydrate($('#modal'));$('#ov').classList.remove('hidden')}
-function closeModal(){stopRing();$('#ov').classList.add('hidden');$('#modal').innerHTML=''}
+function modal(html){$('#modal').innerHTML=html;hydrate($('#modal'));$('#ov').classList.remove('hidden');navPush('modal',()=>closeModal(true))}
+function closeModal(fromNav){if(fromNav!==true)navDone('modal');stopRing();$('#ov').classList.add('hidden');$('#modal').innerHTML=''}
 $('#ov').onclick=e=>{if(e.target.id==='ov')closeModal()};
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeMenu()}});
 function bindModal(map){Object.entries(map).forEach(([id,fn])=>{const el=$('#modal #'+id);if(el)el.onclick=fn})}
@@ -198,9 +198,9 @@ function scheduleModal(){
 // ---------- menus ----------
 $('#btnSideMore').onclick=e=>{
  const n=invites.length;
- const el=popMenu(`<button data-a="grp">${row('users','Create or join a group')}</button><button data-a="inv">${row('user-plus','Invite member')}</button><button data-a="ivs">${row('bell','Invitations')}${n?`<span class="cnt">${n}</span>`:''}</button><button data-a="star">${row('star','Starred messages')}</button><button data-a="calls">${row('phone','Call history')}</button>${me.isAdmin?`<button data-a="adm">${row('gear','Admin dashboard')}</button>`:''}<hr><button data-a="set">${row('gear','Settings')}</button>`,e.currentTarget.getBoundingClientRect());
+ const el=popMenu(`<button data-a="grp">${row('users','Create or join a group')}</button><button data-a="inv">${row('user-plus','Invite member')}</button><button data-a="ivs">${row('bell','Invitations')}${n?`<span class="cnt">${n}</span>`:''}</button><button data-a="friends">${row('users','Find friends from contacts')}</button><button data-a="star">${row('star','Starred messages')}</button><button data-a="calls">${row('phone','Call history')}</button>${me.isAdmin?`<button data-a="adm">${row('gear','Admin dashboard')}</button>`:''}<hr><button data-a="set">${row('gear','Settings')}</button>`,e.currentTarget.getBoundingClientRect());
  el.dataset.menu=1;
- el.onclick=ev=>{const b=ev.target.closest('button');if(!b)return;closeMenu();({grp:groupModal,inv:()=>inviteModal(),ivs:invitationsModal,star:starModal,calls:callsModal,adm:adminModal,set:settingsModal})[b.dataset.a]()};
+ el.onclick=ev=>{const b=ev.target.closest('button');if(!b)return;closeMenu();({grp:groupModal,inv:()=>inviteModal(),ivs:invitationsModal,friends:friendsModal,star:starModal,calls:callsModal,adm:adminModal,set:settingsModal})[b.dataset.a]()};
 };
 $('#btnMore').onclick=e=>{
  const c=chatById(cur);if(!c)return;
@@ -261,7 +261,7 @@ function galleryModal(){
    if(/^video\//.test(f.type))return `<div class="g"><video src="${u}" preload="metadata" controls></video></div>`;
    return `<a class="g" href="${u}" target="_blank" rel="noopener" download="${esc(f.name)}" style="flex-direction:column;color:var(--text);text-decoration:none">${ic(/^audio\//.test(f.type)?'mic':'file',22)}<span>${esc(f.name.slice(0,22))}</span></a>`}).join('')}</div>`:'<p style="color:var(--sub)">No photos, videos or files in this chat yet.</p>';
  });
- $('#modal').onclick=e=>{const x=e.target.closest('[data-lb]');if(x){e.preventDefault();lbList=[x.dataset.lb];lbI=0;$('#lb').classList.remove('hidden');lbShow()}};
+ $('#modal').onclick=e=>{const x=e.target.closest('[data-lb]');if(x){e.preventDefault();lbList=[x.dataset.lb];lbI=0;lbReveal();lbShow()}};
 }
 function pollModal(){
  modal(`<h3>Create a poll</h3><input type="text" id="plQ" maxlength="200" placeholder="Question"><div id="plO" style="margin-top:8px"></div><button class="link" id="plAdd">Add option</button>
@@ -279,13 +279,14 @@ function pollModal(){
 function groupModal(){
  modal(`<h3>Join a group</h3><input type="text" id="gNum" inputmode="numeric" maxlength="6" placeholder="6-digit group code"><div class="err" id="mErr"></div>
  <div class="acts"><button class="btn sec" id="mCancel">Cancel</button><button class="btn" id="gJoin">Join</button></div>
+ ${window.BarcodeDetector?'<div style="margin-top:8px"><button class="link" id="gScan">Scan a group QR code instead</button></div>':''}
  <hr><h3>Create a group</h3><p style="color:var(--sub);font-size:13px;margin:0 0 8px">You become the admin of any group you create.</p>
  <input type="text" id="gName" placeholder="Group name" maxlength="40" style="margin-bottom:8px"><input type="text" id="gDesc" placeholder="Description (optional)" maxlength="200">
  <label class="l" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="gOnly" style="width:auto"> Only I (admin) can post</label>
  <div class="acts"><button class="btn" id="gCreate">Create group</button></div>`);
  const join=()=>emit('group:join',{number:$('#gNum').value},d=>{if(d.error){$('#mErr').textContent=d.error;return}closeModal();if(d.pending){toast('Request sent. An admin of '+d.name+' must approve it.',6000);return}openChat(d.chat.id)});
  $('#gNum').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();join()}});
- bindModal({mCancel:closeModal,gJoin:join,gCreate:()=>emit('group:create',{name:$('#gName').value,description:$('#gDesc').value,onlyAdminPosts:$('#gOnly').checked},d=>{if(d.error){$('#mErr').textContent=d.error;return}closeModal();openChat(d.chat.id);toast('Group code: '+d.chat.number,6000)})});
+ bindModal({mCancel:closeModal,gJoin:join,gScan:()=>{closeModal();scanQr()},gCreate:()=>emit('group:create',{name:$('#gName').value,description:$('#gDesc').value,onlyAdminPosts:$('#gOnly').checked},d=>{if(d.error){$('#mErr').textContent=d.error;return}closeModal();openChat(d.chat.id);toast('Group created. You are the admin. Group code: '+d.chat.number,7000)})});
 }
 function joinPrompt(code){
  modal(`<h3>Join this group?</h3><p>Someone shared the group code <b>${esc(code)}</b> with you.</p><div class="err" id="mErr"></div><div class="acts"><button class="btn sec" id="mCancel">Not now</button><button class="btn" id="jGo">Join group</button></div>`);
@@ -307,9 +308,11 @@ function inviteModal(chatId){
   <div id="iRes" style="margin-top:8px"></div>
   <hr><h4>Or share the group code</h4>
   <div class="num">${esc(g.number)}</div>
-  <p style="color:var(--sub);font-size:13px;text-align:center;margin:0 0 8px">Anyone with this code can join ${esc(g.name)}.</p>
+  <div style="text-align:center;margin-bottom:8px"><div class="qrbox" id="qr"></div></div>
+  <p style="color:var(--sub);font-size:13px;text-align:center;margin:0 0 8px">Anyone with this code, link or QR code can join ${esc(g.name)}.</p>
   <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn sec" id="iCode">${row('copy','Copy code')}</button><button class="btn sec" id="iLink">${row('share','Copy invite link')}</button>${navigator.share?`<button class="btn" id="iShare">${row('share','Share')}</button>`:''}</div>
   <div class="acts"><button class="btn sec" id="mCancel">Close</button></div>`);
+  try{const q=qrcode(0,'M');q.addData(link());q.make();$('#qr').innerHTML=q.createSvgTag({cellSize:4,margin:0,scalable:true})}catch{$('#qr').remove()}
   $('#iGroup').onchange=e=>{sel=e.target.value;draw()};
   const find=()=>{const q=$('#iQ').value.trim();if(!q)return;emit('user:find',{q},d=>{
    const u=d&&d.users&&d.users[0];
@@ -365,7 +368,7 @@ function infoModal(){
  }
  const owner=c.admin===me.id,mgr=owner||(c.admins||[]).includes(me.id);
  modal(`<div style="text-align:center">${avHtml(c.name,c.icon&&U(c.icon),false,'lg')}${mgr?'<br><button class="link" id="gIcon">Change group photo</button><input type="file" id="gIconF" accept="image/*" class="hidden">':''}</div>
- <h3 style="text-align:center;margin-top:8px">${esc(c.name)}</h3><p style="color:var(--sub);text-align:center">${esc(c.description||'')}</p>
+ <h3 style="text-align:center;margin-top:8px">${esc(c.name)}</h3>${owner?'<p style="text-align:center;color:var(--accent);margin:0"><b>You are the admin of this group</b></p>':mgr?'<p style="text-align:center;color:var(--accent);margin:0"><b>You are an admin of this group</b></p>':''}<p style="color:var(--sub);text-align:center">${esc(c.description||'')}</p>
  ${c.announce?`<div class="setrow"><div class="grow"><b>Pinned announcement</b><small>${esc(c.announce.text)}</small></div>${mgr?'<button class="link" id="gUnpin">Unpin</button>':''}</div>`:''}
  <div style="text-align:center;color:var(--sub);font-size:13px">Group code. Share it so others can join.</div><div class="num">${esc(c.number)}</div>
  <div style="text-align:center"><button class="link" id="gCopy">Copy code</button>${mgr?' · <button class="link" id="gRegen">New code</button>':''} · <button class="link" id="gInv">Invite member</button></div>
@@ -412,7 +415,7 @@ function settingsModal(){
  modal(`<h3>Settings</h3>
  <div class="setrow" style="cursor:pointer" id="sProf">${avHtml(me.name,me.avatar)}<div class="grow"><b>${esc(me.name)}</b><small>${esc(me.phone?'+'+me.phone:'Add your mobile number')}</small></div>${ic('chevron',18)}</div>
  <div class="setrow"><div class="grow"><b>Theme</b></div><div class="seg" id="sTheme">${[['light','Light'],['dark','Dark'],['auto','Device']].map(([k,l])=>`<button data-th="${k}" class="${k===theme?'on':''}">${l}</button>`).join('')}</div></div>
- <div class="setrow"><div class="grow"><b>Call and message alerts</b><small>${esc(alerts)}</small></div>${perm==='default'?'<button class="btn" id="sAlert" style="padding:6px 12px">Turn on</button>':perm==='granted'?'<button class="btn sec" id="sAlert" style="padding:6px 12px">Refresh</button>':''}</div>
+ <div class="setrow" style="align-items:flex-start"><div class="grow"><b>Call and message alerts</b><small>${esc(alerts)}</small><div id="alDev" style="margin-top:6px;font-size:12px;color:var(--sub)"></div></div><div style="display:flex;flex-direction:column;gap:6px">${perm==='default'?'<button class="btn" id="sAlert" style="padding:6px 12px">Turn on</button>':perm==='granted'?'<button class="btn sec" id="sAlert" style="padding:6px 12px">Re-register</button><button class="btn sec" id="sTest" style="padding:6px 12px">Test alert</button><button class="btn sec" id="sRing" style="padding:6px 12px">Test ringing</button>':''}</div></div>
  <div class="setrow"><div class="grow"><b>Hide last seen and online</b><small>Others will not see when you were last online. You will not see theirs either way.</small></div><input type="checkbox" id="sHide" style="width:auto" ${me.hideSeen?'checked':''}></div>
  <div class="setrow" style="cursor:pointer" id="sLock"><div class="grow"><b>App lock</b><small>${store.get('mk_pin')?'On. Asks for your PIN when you come back.':'Off. Protect the app with a PIN.'}</small></div>${ic('chevron',18)}</div>
  <div class="setrow" style="cursor:pointer" id="sBlk"><div class="grow"><b>Blocked contacts</b><small>${nb?nb+' blocked':'None'}</small></div>${ic('chevron',18)}</div>
@@ -420,8 +423,11 @@ function settingsModal(){
  ${installEv||(isIOS&&!standalone)?`<div class="setrow"><div class="grow"><b>Install app</b><small>${installEv?'Add MK Messages to your device':'Share, then Add to Home Screen'}</small></div>${installEv?'<button class="btn" id="sInst" style="padding:6px 12px">Install</button>':''}</div>`:''}
  <div class="acts" style="margin-top:18px;justify-content:space-between"><button class="btn sec" id="mCancel">Close</button><button class="btn danger" id="sOut">${row('logout','Log out')}</button></div>`);
  bindModal({mCancel:closeModal,sProf:()=>profileModal(),sLock:appLockModal,sBlk:blockedModal,sAdm:adminModal,sOut:()=>{if(confirm('Log out of MK Messages on this device?'))logout()},
-  sAlert:async()=>{await enablePush();settingsModal()},
+  sAlert:async()=>{await enablePush(perm==='granted');settingsModal()},
+  sTest:()=>emit('push:test',{},d=>{toast(d.error||(d.results.every(r=>r.status>=200&&r.status<300)?'Test alert sent. It should appear in a few seconds.':'The push service refused the alert ('+d.results.map(r=>r.status||r.err).join(', ')+'). Try Re-register.'),7000)}),
+  sRing:()=>{toast('Lock your screen or switch to another app now. A test call rings in 8 seconds.',8000);setTimeout(()=>emit('push:test',{ring:true},d=>{if(d.error)toast(d.error,6000)}),8000)},
   sInst:async()=>{installEv.prompt();await installEv.userChoice.catch(()=>{});installEv=null;settingsModal()}});
+ if(perm==='granted')emit('push:status',{},d=>{const el=$('#alDev');if(!el)return;const l=(d&&d.devices)||[];el.innerHTML=l.length?l.map(x=>{const ok=x.last&&x.last.status>=200&&x.last.status<300;return esc(x.host.replace(/^(fcm\.googleapis\.com)$/,'Chrome / Android').replace(/mozilla.*/,'Firefox').replace(/apple.*/,'Apple'))+': '+(x.last?(ok?'last alert delivered':'last alert refused ('+(x.last.status||x.last.err)+')'):'no alerts sent yet')}).join('<br>'):'This device is not registered yet. Tap Re-register.'});
  $('#sHide').onchange=e=>emit('privacy:set',{hideSeen:e.target.checked},()=>toast(e.target.checked?'Your last seen and online status are hidden':'Your last seen and online status are visible'));
  $('#sTheme').onclick=e=>{const b=e.target.closest('[data-th]');if(!b)return;store.set('mk_theme',b.dataset.th);applyTheme();document.querySelectorAll('#sTheme button').forEach(x=>x.classList.toggle('on',x===b))};
 }
@@ -434,7 +440,7 @@ function blockedModal(){
 // ---------- app lock (PIN) ----------
 const pinHash=async p=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode('mk:'+p)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 let lastHidden=0;
-function showLock(){if(!store.get('mk_pin')||!token)return;$('#lock').classList.remove('hidden');$('#lockPin').value='';$('#lockErr').textContent='';setTimeout(()=>$('#lockPin').focus(),50)}
+function showLock(){if(!store.get('mk_pin')||!token)return;$('#lock').classList.remove('hidden');$('#lockPin').value='';$('#lockErr').textContent='';$('#lockBio').classList.toggle('hidden',!store.get('mk_bio'));if(store.get('mk_bio'))setTimeout(bioUnlock,200);else setTimeout(()=>$('#lockPin').focus(),50)}
 async function tryUnlock(){if(await pinHash($('#lockPin').value)===store.get('mk_pin')){$('#lock').classList.add('hidden')}else{$('#lockErr').textContent='Wrong PIN';$('#lockPin').value=''}}
 $('#lockGo').onclick=tryUnlock;$('#lockPin').addEventListener('keydown',e=>{if(e.key==='Enter')tryUnlock()});
 $('#lockOut').onclick=()=>{if(confirm('Log out? You will need your password to sign in again.'))logout()};
@@ -445,14 +451,19 @@ function appLockModal(){
  ${on?'<label class="l">Current PIN</label><input type="password" id="pnOld" inputmode="numeric" maxlength="8">':''}
  <label class="l">${on?'New PIN (leave empty to turn off)':'New PIN'}</label><input type="password" id="pnNew" inputmode="numeric" maxlength="8">
  ${on?'':'<label class="l">Repeat PIN</label><input type="password" id="pnNew2" inputmode="numeric" maxlength="8">'}
+ ${window.PublicKeyCredential?`<label class="l" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pnBio" style="width:auto" ${store.get('mk_bio')?'checked':''}> Also unlock with fingerprint, face or screen lock</label>`:''}
  <div class="err" id="mErr"></div><div class="acts"><button class="btn sec" id="mCancel">Cancel</button><button class="btn" id="pnGo">Save</button></div>`);
  bindModal({mCancel:closeModal,pnGo:async()=>{
   const n=$('#pnNew').value;
   if(on){if(await pinHash($('#pnOld').value)!==store.get('mk_pin')){$('#mErr').textContent='Current PIN is wrong';return}
-   if(!n){store.del('mk_pin');toast('App lock is off');closeModal();return}}
+   if(!n){store.del('mk_pin');store.del('mk_bio');toast('App lock is off');closeModal();return}}
   if(!/^\d{4,8}$/.test(n)){$('#mErr').textContent='Use 4 to 8 digits';return}
   if(!on&&n!==$('#pnNew2').value){$('#mErr').textContent='The PINs do not match';return}
-  store.set('mk_pin',await pinHash(n));toast('App lock is on');closeModal();
+  store.set('mk_pin',await pinHash(n));
+  const bio=$('#pnBio');
+  if(bio&&bio.checked&&!store.get('mk_bio')){try{await bioRegister()}catch{toast('Could not set up fingerprint unlock on this device. The PIN still works.',5000)}}
+  if(bio&&!bio.checked)store.del('mk_bio');
+  toast('App lock is on');closeModal();
  }});
 }
 // ---------- admin dashboard ----------
@@ -483,17 +494,18 @@ function adminModal(){
 // ---------- alerts (Web Push) + install ----------
 const pushSupported=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
 const b64uToBytes=s=>{s=s.replace(/-/g,'+').replace(/_/g,'/');s+='='.repeat((4-s.length%4)%4);return Uint8Array.from(atob(s),c=>c.charCodeAt(0))};
-async function enablePush(){
+async function enablePush(fresh){
  if(!pushSupported()){toast('This browser cannot show alerts. On iPhone, add MK Messages to your Home Screen first.',6000);return false}
  const perm=await Notification.requestPermission();
  if(perm!=='granted'){toast('Alerts are blocked. Allow notifications for this site in your browser settings.',6000);return false}
- return pushSync(true);
+ return pushSync(true,fresh);
 }
-async function pushSync(force){
+async function pushSync(force,fresh){
  if(!pushSupported()||Notification.permission!=='granted')return false;
  try{
   const reg=await navigator.serviceWorker.ready;
   let sub=await reg.pushManager.getSubscription();
+  if(sub&&fresh){await sub.unsubscribe();sub=null}
   if(!sub){const k=await (await fetch(API+'/api/push/key')).json();sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uToBytes(k.key)})}
   emit('push:subscribe',{sub:sub.toJSON()},d=>{if(d&&d.error&&force)toast(d.error)});
   if(force)toast('Alerts are on');
@@ -501,9 +513,76 @@ async function pushSync(force){
  }catch(e){if(force)toast('Could not turn on alerts: '+(e.message||'unknown error'),6000);return false}
 }
 $('#alertOn').onclick=async()=>{if(await enablePush())$('#alertBanner').classList.add('hidden')};
-$('#alertX').onclick=()=>{store.set('mk_alert_dismiss','1');$('#alertBanner').classList.add('hidden')};
+$('#alertX').onclick=()=>{try{sessionStorage.setItem('mk_alert_x','1')}catch{}$('#alertBanner').classList.add('hidden')};
 let installEv=null;
 const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
 const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEv=e});
 addEventListener('appinstalled',()=>{installEv=null;toast('MK Messages installed')});
+
+// ---------- scan a group QR code ----------
+async function scanQr(){
+ let stream;
+ try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false})}catch{toast('Allow the camera to scan a QR code');return}
+ const v=$('#scanVid');v.srcObject=stream;v.play().catch(()=>{});
+ $('#scan').classList.remove('hidden');navPush('scan',()=>stop(true));
+ const det=new BarcodeDetector({formats:['qr_code']});let alive=true;
+ function stop(fromNav){if(!alive)return;alive=false;stream.getTracks().forEach(t=>t.stop());v.srcObject=null;$('#scan').classList.add('hidden');if(fromNav!==true)navDone('scan')}
+ $('#scanX').onclick=()=>stop();
+ (async function loop(){
+  while(alive){
+   try{const r=await det.detect(v);const raw=r[0]&&r[0].rawValue;
+    if(raw){const m=/[?&]join=(\d{6})/.exec(raw)||/^(\d{6})$/.exec(raw);if(m){stop();emit('group:join',{number:m[1]},d=>{if(d.error){toast(d.error);return}if(d.pending){toast('Request sent. An admin of '+d.name+' must approve it.',6000);return}openChat(d.chat.id)});return}}}catch{}
+   await new Promise(r=>setTimeout(r,300));
+  }
+ })();
+}
+// ---------- find friends from your phone's contacts ----------
+async function friendsModal(){
+ if(!(navigator.contacts&&navigator.contacts.select)){
+  modal(`<h3>Find friends</h3><p>Picking people from your phone's contacts works in Chrome on Android. On other devices, type a full mobile number or username into the search box on the chat list.</p><div class="acts">${navigator.share?'<button class="btn sec" id="fShare">Invite friends to MK Messages</button>':''}<button class="btn" id="mCancel">Close</button></div>`);
+  bindModal({mCancel:closeModal,fShare:()=>navigator.share({title:'MK Messages',text:'Join me on MK Messages',url:location.origin}).catch(()=>{})});return;
+ }
+ let picked;
+ try{picked=await navigator.contacts.select(['name','tel'],{multiple:true})}catch{return}
+ const phones=picked.flatMap(c=>c.tel||[]);
+ if(!phones.length){toast('No phone numbers in the contacts you picked');return}
+ emit('users:match',{phones},d=>{
+  const l=(d&&d.users)||[];l.forEach(u=>users[u.id]=users[u.id]||u);
+  modal(`<h3>${l.length?l.length+' of your contacts '+(l.length>1?'are':'is')+' on MK Messages':'None of those contacts are on MK Messages yet'}</h3>${l.map(u=>`<div class="mem">${avHtml(u.name,u.avatar,u.online,'sm')}<div class="grow">${esc(u.name)}<br><small style="color:var(--sub)">${u.phone?'+'+esc(u.phone):''}</small></div><button class="btn" data-user="${esc(u.id)}" style="padding:6px 12px">Message</button></div>`).join('')}<div class="acts">${navigator.share?'<button class="btn sec" id="fShare">Invite the rest</button>':''}<button class="btn" id="mCancel">Close</button></div>`);
+  bindModal({mCancel:closeModal,fShare:()=>navigator.share({title:'MK Messages',text:'Join me on MK Messages',url:location.origin}).catch(()=>{})});
+  $('#modal').onclick=e=>{const b=e.target.closest('[data-user]');if(b)emit('dm:open',{user:b.dataset.user},r=>{if(r.chat){closeModal();openChat(r.chat.id)}})};
+ });
+}
+// ---------- receive files and text shared from other apps ----------
+async function shareModal(){
+ const sh=await kvGet('share');
+ if(!sh||(!sh.text&&!sh.url&&!(sh.files||[]).length)){toast('Nothing to share');return}
+ const text=[sh.title,sh.text,sh.url].filter(Boolean).join('\n');
+ modal(`<h3>Share to…</h3><p style="color:var(--sub);font-size:13px">${(sh.files||[]).length?(sh.files.length+' file'+(sh.files.length>1?'s':'')):''}${(sh.files||[]).length&&text?' and ':''}${text?'text':''} from another app</p>${chats.map(c=>`<div class="mem" style="cursor:pointer" data-id="${esc(c.id)}">${chatAv(c).replace('class="av ','class="av sm ')}<div class="grow">${esc(title(c))}</div></div>`).join('')||'<div class="empty">No chats yet</div>'}<div class="acts"><button class="btn sec" id="mCancel">Cancel</button></div>`);
+ bindModal({mCancel:()=>{kvDel('share');closeModal()}});
+ $('#modal').onclick=async e=>{
+  const el=e.target.closest('.mem');if(!el)return;const chat=el.dataset.id;closeModal();kvDel('share');
+  openChat(chat,true);
+  if(text)emit('message:send',{chat,text},d=>{if(d&&d.error)toast(d.error)});
+  for(const f of sh.files||[]){
+   if(f.blob.size>100*1024*1024){toast(f.name+' is too large (max 100 MB)');continue}
+   const up=await uploadFile(f.blob,f.name||'file',f.type||'application/octet-stream',p=>toast('Uploading '+p+'%',60000));
+   if(up.error){toast(up.error);continue}
+   emit('message:send',{chat,text:'',file:up},d=>{if(d&&d.error)toast(d.error)});
+  }
+  toast('Shared');
+ };
+}
+// ---------- unlock with fingerprint / face / screen lock ----------
+const b64=b=>btoa(String.fromCharCode(...new Uint8Array(b)));
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function bioRegister(){
+ const cred=await navigator.credentials.create({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),rp:{name:'MK Messages'},user:{id:crypto.getRandomValues(new Uint8Array(16)),name:me.name,displayName:me.name},pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required'},timeout:60000}});
+ store.set('mk_bio',b64(cred.rawId));
+}
+async function bioUnlock(){
+ const id=store.get('mk_bio');if(!id)return false;
+ try{await navigator.credentials.get({publicKey:{challenge:crypto.getRandomValues(new Uint8Array(32)),allowCredentials:[{type:'public-key',id:unb64(id)}],userVerification:'required',timeout:60000}});$('#lock').classList.add('hidden');return true}catch{return false}
+}
+$('#lockBio').onclick=bioUnlock;

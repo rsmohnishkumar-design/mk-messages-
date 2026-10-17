@@ -28,7 +28,7 @@ async function openAR(){
  if(!cur||ar)return;
  const c=chatById(cur);
  ar={chat:cur,pos:null,pose:null,pins:[],nodes:{},raf:0,stream:null,watch:null,abs:false};
- $('#ar').classList.remove('hidden');$('#arTitle').textContent='AR notes · '+title(c);
+ $('#ar').classList.remove('hidden');navPush('ar',()=>closeAR(true));$('#arTitle').textContent='AR notes · '+title(c);
  $('#arStat').textContent='Starting camera, GPS and compass…';
  try{if(window.DeviceOrientationEvent&&DeviceOrientationEvent.requestPermission)await DeviceOrientationEvent.requestPermission()}catch{}
  addEventListener('deviceorientationabsolute',arOri,true);addEventListener('deviceorientation',arOri,true);
@@ -38,8 +38,8 @@ async function openAR(){
  emit('pin:list',{chat:cur},d=>{if(ar&&d&&d.pins)ar.pins=d.pins});
  arLoop();
 }
-function closeAR(){
- if(!ar)return;
+function closeAR(fromNav){
+ if(!ar)return;if(fromNav!==true)navDone('ar');
  cancelAnimationFrame(ar.raf);removeEventListener('deviceorientationabsolute',arOri,true);removeEventListener('deviceorientation',arOri,true);
  if(ar.watch!=null&&navigator.geolocation)navigator.geolocation.clearWatch(ar.watch);
  if(ar.stream)ar.stream.getTracks().forEach(t=>t.stop());
@@ -129,7 +129,7 @@ function arListModal(){
  };
  $('#modal').onclick=e=>{const el=e.target.closest('.mem[data-id]');if(el){const p=ar.pins.find(x=>x.id===el.dataset.id);if(p)arNoteInfo(p)}};
 }
-$('#arClose').onclick=closeAR;$('#arPlace').onclick=arPlaceModal;$('#arList').onclick=arListModal;
+$('#arClose').onclick=()=>closeAR();$('#arPlace').onclick=arPlaceModal;$('#arList').onclick=arListModal;
 function nearbyCheck(){
  if(!navigator.permissions||!navigator.geolocation)return;
  navigator.permissions.query({name:'geolocation'}).then(s=>{

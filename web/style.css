@@ -188,3 +188,11 @@ input[type=text],input[type=password],input[type=tel],input[type=datetime-local]
 .stats div{background:var(--hover);border-radius:10px;padding:10px;text-align:center}.stats b{display:block;font-size:20px}.stats small{color:var(--sub)}
 .row .b.swipe{transition:transform .15s}
 .hl{outline:2px solid var(--accent);transition:outline-color 1s}
+
+#callPill{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom));z-index:72;background:#1b8a3a;color:#fff;border:0;border-radius:26px;padding:11px 20px;display:flex;gap:10px;align-items:center;box-shadow:0 4px 18px rgba(0,0,0,.4);font-weight:600}
+#callPill .dotr{width:10px;height:10px;border-radius:50%;background:#fff;animation:blink 1.2s infinite}
+#callPill b{font-variant-numeric:tabular-nums}
+#scan{position:fixed;inset:0;background:#000;z-index:88;display:flex;align-items:center;justify-content:center;color:#fff}
+#scan video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.scanBox{position:relative;width:62vmin;height:62vmin;border:3px solid #fff;border-radius:16px;box-shadow:0 0 0 100vmax rgba(0,0,0,.55)}
+.qrbox{background:#fff;padding:10px;border-radius:12px;display:inline-block}.qrbox svg{display:block;width:180px;height:180px}

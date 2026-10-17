@@ -1,17 +1,37 @@
 {
   "name": "MK Messages",
   "short_name": "MK Messages",
-  "description": "Group chat with admin-created group numbers",
+  "description": "Group chat, calls, polls and more",
   "start_url": "/",
   "scope": "/",
   "id": "/",
   "display": "standalone",
-  "orientation": "portrait-primary",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
   "background_color": "#ffffff",
   "theme_color": "#1a73e8",
+  "categories": ["social", "communication"],
+  "launch_handler": { "client_mode": "focus-existing" },
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ]
+  ],
+  "shortcuts": [
+    { "name": "New group", "short_name": "New group", "url": "/?action=newgroup", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Search", "short_name": "Search", "url": "/?action=search", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Call history", "short_name": "Calls", "url": "/?action=calls", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Invite member", "short_name": "Invite", "url": "/?action=invite", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [{ "name": "media", "accept": ["image/*", "video/*", "audio/*", "application/pdf", "text/plain"] }]
+    }
+  }
 }

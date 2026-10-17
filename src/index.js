@@ -232,6 +232,8 @@ export class Hub {
     if (url.pathname === '/api/login' && request.method === 'POST') return this.login(await request.json().catch(() => ({})));
     if (url.pathname === '/api/push/key' && request.method === 'GET') return json({ key: (await this.getVapid()).pub });
     if (url.pathname === '/api/ice' && request.method === 'GET') return this.iceServers(request);
+    if (url.pathname === '/api/send' && request.method === 'POST') return this.httpSend(request);
+    if (url.pathname === '/api/read' && request.method === 'POST') return this.httpRead(request);
     if (url.pathname === '/api/admin/backup' && request.method === 'GET') return this.adminBackup(request, url);
     if (url.pathname === '/api/upload/start' && request.method === 'POST') return this.uploadStart(request);
     if (url.pathname === '/api/upload/part' && request.method === 'POST') return this.uploadPart(request, url);
@@ -403,7 +405,7 @@ export class Hub {
         if (!this.users[uid].hideSeen) this.toAll('presence', { id: uid, online: false, lastSeen: this.users[uid].lastSeen });
       }
     };
-    ws.addEventListener('close', gone);
+    ws.addEventListener('close', () => { try { ws.close(); } catch {} gone(); }); // complete the close handshake so the client can reconnect
     ws.addEventListener('error', gone);
   }
 
@@ -537,17 +539,26 @@ export class Hub {
   leaveCalls(uid) { for (const cid of Object.keys(this.calls)) this.leaveCall(uid, cid); }
 
   // ---- web push (rings / notifies people whose app is closed or in the background) ----
+  async pushNow(uid, payload, opts) {
+    const u = this.users[uid];
+    if (!u || !(u.push || []).length) return [];
+    const vapid = await this.getVapid();
+    const dead = [];
+    const res = await Promise.all(u.push.map(async (sub) => {
+      let st = 0, err = null;
+      try { st = await sendPush(vapid, sub, payload, opts); } catch (e) { err = String(e && e.message || e).slice(0, 80); }
+      sub.last = { status: st, at: Date.now(), err };
+      if (st === 404 || st === 410) dead.push(sub.endpoint);
+      return { host: new URL(sub.endpoint).host, status: st, err };
+    }));
+    if (dead.length) u.push = u.push.filter((x) => !dead.includes(x.endpoint));
+    this.save();
+    return res;
+  }
   pushTo(uid, payload, opts) {
     const u = this.users[uid];
     if (!u || !(u.push || []).length) return;
-    this.ctx.waitUntil((async () => {
-      const vapid = await this.getVapid();
-      const dead = [];
-      await Promise.all(u.push.map(async (sub) => {
-        try { const st = await sendPush(vapid, sub, payload, opts); if (st === 404 || st === 410) dead.push(sub.endpoint); } catch {}
-      }));
-      if (dead.length) { u.push = u.push.filter((x) => !dead.includes(x.endpoint)); this.save(); }
-    })());
+    this.ctx.waitUntil(this.pushNow(uid, payload, opts).catch(() => {}));
   }
   joinGroup(uid, g, how, viaAdmin) {
     if (g.members.includes(uid)) return false;
@@ -575,6 +586,24 @@ export class Hub {
   invitesFor(uid) { return Object.values(this.invites).filter((i) => i.to === uid && this.groups[i.chat]).map((i) => this.inviteView(i)); }
 
   // ---- call relay (TURN) so calls connect on strict networks; needs TURN_KEY_ID + TURN_KEY_API_TOKEN secrets ----
+  async httpSend(request) {
+    const uid = this.authed(request);
+    if (!uid) return json({ error: 'Not signed in' }, 401);
+    const d = await request.json().catch(() => ({}));
+    const r = this.deliver(uid, String(d.chat || ''), { text: String(d.text || '').slice(0, 4000) });
+    return json(r.error ? { error: r.error } : { ok: true }, r.error ? 400 : 200);
+  }
+  async httpRead(request) {
+    const uid = this.authed(request);
+    if (!uid) return json({ error: 'Not signed in' }, 401);
+    const d = await request.json().catch(() => ({}));
+    const chat = String(d.chat || '');
+    if (!this.chatOf(uid, chat)) return json({ error: 'Not a member' }, 404);
+    let changed = false;
+    for (const m of this.messages[chat] || []) if (!m.system && !m.readBy.includes(uid)) { m.readBy.push(uid); changed = true; }
+    if (changed) { this.saveChat(chat); this.toChat(chat, 'chat:read', { chat, user: uid }); this.sendChats(uid); }
+    return json({ ok: true });
+  }
   async iceServers(request) {
     if (!this.authed(request)) return json({ error: 'Not signed in' }, 401);
     const k = this.env.TURN_KEY_ID, t = this.env.TURN_KEY_API_TOKEN;
@@ -875,7 +904,10 @@ export class Hub {
           if (other && ((other.blocked || []).includes(uid) || (me.blocked || []).includes(other.id))) return cb({ error: "You can't call this person" });
         }
         if (fresh) call = this.calls[chat] = { id: id(), chat, video: !!video, started: Date.now(), users: [], starter: uid, answered: false };
-        if (call.users.includes(uid)) return cb({ error: 'Already in this call' });
+        if (call.users.includes(uid)) {   // rejoining after a dropped connection: reset our slot cleanly
+          call.users = call.users.filter((u) => u !== uid);
+          call.users.forEach((u) => this.toUser(u, 'call:left', { chat, user: uid }));
+        }
         const others = call.users.slice();
         call.users.push(uid);
         if (fresh) {
@@ -888,7 +920,8 @@ export class Hub {
           });
         } else { call.answered = true; others.forEach((u) => this.toUser(u, 'call:joined', { chat, user: uid })); }
         c.members.forEach((m) => this.toUser(m, 'call:state', { chat, call: this.callView(call) }));
-        cb({ ok: true, call: { id: call.id, video: call.video, users: others } });
+        const unreachable = fresh ? c.members.filter((m) => m !== uid && !this.isOnline(m) && !((this.users[m] || {}).push || []).length).map((m) => this.users[m].name) : [];
+        cb({ ok: true, call: { id: call.id, video: call.video, users: others }, unreachable });
       },
       'call:leave'({ uid }, { chat }, cb) { this.leaveCall(uid, chat); cb({ ok: true }); },
       'call:signal'({ uid }, { chat, to, data }) {
@@ -992,6 +1025,7 @@ export class Hub {
         cb({ ok: true });
       },
       'app:vis'({ ws }, { v }) { this.vis.set(ws, !!v); },
+      'ping'({ ws }) { this.send(ws, 'pong', {}); },
       'once:view'({ uid }, { chat, id: mid }, cb) {
         const c = this.chatOf(uid, chat), m = c && this.findMsg(chat, mid);
         if (!m || !m.once || m.deleted || !m.file) return cb({ error: 'Not available' });
@@ -1117,6 +1151,24 @@ export class Hub {
         if (!me.isAdmin) return cb({ error: 'Admins only' });
         if (!this.env.BACKUPS) return cb({ error: 'Backup storage is not connected' });
         cb({ ok: true, name: await this.takeSnapshot() });
+      },
+      async 'push:test'({ uid, me }, { ring }, cb) {
+        if (!(me.push || []).length) return cb({ devices: 0, results: [], error: 'This account has no device with alerts turned on yet.' });
+        const payload = ring ? { t: 'call', chat: 'test', from: 'MK Messages test', video: false, title: 'MK Messages test' } : { t: 'msg', chat: 'test', title: 'MK Messages', body: 'Test alert. If you can read this, alerts work on this device.' };
+        const results = await this.pushNow(uid, payload, ring ? { ttl: 45, urgency: 'high' } : undefined);
+        if (ring) this.ctx.waitUntil(new Promise((r) => setTimeout(r, 40000)).then(() => this.pushNow(uid, { t: 'call-end', chat: 'test' }).catch(() => {})));
+        cb({ devices: me.push.length, results });
+      },
+      'push:status'({ me }, _d, cb) {
+        cb({ devices: (me.push || []).map((x) => ({ host: new URL(x.endpoint).host, since: x.ts, last: x.last || null })) });
+      },
+      'users:match'({ uid }, { phones }, cb) {
+        const out = [], seen = new Set();
+        for (const raw of (Array.isArray(phones) ? phones : []).slice(0, 500)) {
+          const u = this.findByPhone(raw);
+          if (u && u.id !== uid && !seen.has(u.id)) { seen.add(u.id); out.push(this.pub(u)); }
+        }
+        cb({ users: out });
       },
       'users:lookup'({ ws, uid }, { ids }) {
         const allowed = new Set(this.allMemberIds(uid));

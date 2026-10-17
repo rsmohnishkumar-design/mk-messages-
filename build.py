@@ -5,7 +5,7 @@ asset store is needed.  MK_LOCAL=1 points the page at its own origin (for local 
 import base64, json, os, re, sys
 root = os.path.dirname(os.path.abspath(__file__))
 rd = lambda p: open(os.path.join(root, p), encoding='utf-8').read()
-js = '\n'.join(rd('web/' + n) for n in ['core.js', 'features.js', 'call.js', 'ar.js', 'main.js'])
+js = '\n'.join(rd('web/' + n) for n in ['qrcode.js', 'core.js', 'features.js', 'call.js', 'ar.js', 'main.js'])
 if os.environ.get('MK_LOCAL'):
     js = re.sub(r"const API='[^']*';", "const API=location.origin;", js, count=1)
 html = rd('web/index.template.html').replace('/*CSS*/', rd('web/style.css')).replace('<!--BODY-->', rd('web/body.html')).replace('/*JS*/', js)
@@ -32,6 +32,7 @@ const bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 export default {
   async fetch(request) {
     const f = FILES[new URL(request.url).pathname];
+    if (!f && new URL(request.url).pathname === '/share') return Response.redirect(new URL('/', request.url).href, 303);
     if (!f) return new Response('Not found', { status: 404 });
     return new Response(f.b ? bytes(f.d) : f.d, { headers: { 'content-type': f.t, 'cache-control': 'no-cache' } });
   },

@@ -42,6 +42,8 @@ const ICONS={
  share:'<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>',
  tag:'<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
  chevron:'<polyline points="6 9 12 15 18 9"/>',
+ pip:'<rect x="2" y="4" width="20" height="14" rx="2"/><rect x="12" y="11" width="8" height="5" rx="1" fill="currentColor"/>',
+ screen:'<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
  download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
  forward:'<polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/>',
  lock:'<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
@@ -50,6 +52,17 @@ const ICONS={
 const ic=(n,s=20)=>`<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
 const setIcon=(el,n,s)=>{el.dataset.i=n;if(s)el.dataset.s=s;el.innerHTML=ic(n,+el.dataset.s||20)};
 function hydrate(root){(root||document).querySelectorAll('[data-i]').forEach(e=>{e.innerHTML=ic(e.dataset.i,+e.dataset.s||20)})}
+
+// ---------- Android-style back button: closes the top layer instead of leaving the app ----------
+const navStack=[];let navIgnore=0;
+function navPush(name,closer){if(navStack.some(x=>x.name===name))return;navStack.push({name,closer});try{history.pushState({mk:1},'')}catch{}}
+function navDone(name){const i=navStack.findIndex(x=>x.name===name);if(i<0)return;navStack.splice(i,1);navIgnore++;try{history.back()}catch{navIgnore--}}
+addEventListener('popstate',()=>{if(navIgnore>0){navIgnore--;return}const top=navStack.pop();if(top)top.closer()});
+// small key-value store in IndexedDB shared with the service worker (sign-in token for notification replies, shared files)
+const kvDb=()=>new Promise((res,rej)=>{const r=indexedDB.open('mk',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+async function kvSet(k,v){try{const db=await kvDb();await new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=res;t.onerror=()=>rej(t.error)});db.close()}catch{}}
+async function kvGet(k){try{const db=await kvDb();const v=await new Promise((res,rej)=>{const q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)});db.close();return v}catch{return undefined}}
+async function kvDel(k){try{const db=await kvDb();await new Promise((res,rej)=>{const t=db.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=res;t.onerror=()=>rej(t.error)});db.close()}catch{}}
 
 // ---------- state ----------
 let token=store.get('mk_token'),me=null,chats=[],users={},cur=null,msgs={},typers={},ws=null,acks={},ackN=0,reply=null,regMode=false,retry=0,filter='',msgFilter='';
@@ -90,22 +103,43 @@ $('#authForm').onsubmit=async e=>{
 };
 async function logout(){
  try{const reg=await navigator.serviceWorker.getRegistration();const sub=reg&&await reg.pushManager.getSubscription();if(sub){emit('push:unsubscribe',{endpoint:sub.endpoint},()=>{});await sub.unsubscribe()}}catch{}
- store.del('mk_token');token=null;try{ws&&ws.close()}catch{}location.reload();
+ store.del('mk_token');store.del('mk_call');await kvDel('token');token=null;try{ws&&ws.close()}catch{}location.reload();
 }
 
 // ---------- socket ----------
-function start(){$('#auth').classList.add('hidden');$('#app').classList.remove('hidden');connect()}
+function start(){$('#auth').classList.add('hidden');$('#app').classList.remove('hidden');kvSet('token',token);kvSet('api',API);connect()}
 function connect(){
+ if(ws&&(ws.readyState===0||ws.readyState===1))return;
  ws=new WebSocket(API.replace(/^http/,'ws')+'/ws?token='+encodeURIComponent(token));
  ws.onopen=()=>{retry=0};
  ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch{return}onEv(m.ev,m.data)};
  ws.onclose=ev=>{
-  if(ev.code===4001){store.del('mk_token');location.reload();return}
+  if(ev.code===4001){store.del('mk_token');kvDel('token');location.reload();return}
   setTimeout(connect,Math.min(1000*2**retry++,15000));
  };
 }
+// Is the connection really alive? Phones often leave a dead socket behind when the app sleeps.
+let lastPong=Date.now();
+function checkConn(){
+ if(!token)return;
+ if(!ws||ws.readyState>1){retry=0;connect();return}
+ if(ws.readyState!==1)return;
+ const t=Date.now(),sock=ws;
+ try{sock.send(JSON.stringify({ev:'ping'}))}catch{}
+ setTimeout(()=>{if(lastPong<t&&ws===sock){sock.onclose=null;try{sock.close()}catch{}ws=null;retry=0;connect()}},4000);
+}
+addEventListener('online',checkConn);addEventListener('focus',checkConn);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkConn()});
+setInterval(()=>{if(document.visibilityState==='visible')checkConn()},25000);
+window.__mk={dropWs:()=>{try{ws.close()}catch{}}};
+const QUIET=new Set(['typing','app:vis','chat:read','ping','users:lookup','pin:list','chat:history','chat:pref','push:status']);
+function outboxAdd(x){try{const q=JSON.parse(store.get('mk_out')||'[]');q.push(x);store.set('mk_out',JSON.stringify(q.slice(-50)))}catch{}}
+function outboxFlush(){try{const q=JSON.parse(store.get('mk_out')||'[]');if(!q.length)return;store.del('mk_out');q.forEach(x=>emit(x.ev,x.data,d=>{if(d&&d.error)toast(d.error)}));toast('Sent '+q.length+' message'+(q.length>1?'s':'')+' you wrote while offline')}catch{}}
 function emit(ev,data,cb){
- if(!ws||ws.readyState!==1){toast('Reconnecting… try again');return}
+ if(!ws||ws.readyState!==1){
+  if(ev==='message:send'){outboxAdd({ev,data});toast('No connection. Your message will send when you are back online.',4500);if(cb)cb({ok:true,queued:true});return}
+  if(!QUIET.has(ev))toast('Reconnecting… try again');return
+ }
  const m={ev,data};
  if(cb){const k=++ackN;m.ack=k;acks['ack:'+k]=cb}
  ws.send(JSON.stringify(m));
@@ -119,6 +153,7 @@ function onEv(ev,d){
    me=d.me;chats=d.chats;d.users.forEach(u=>users[u.id]=u);users[me.id]=me;
    renderMe();renderList();if(cur&&chats.find(c=>c.id===cur))openChat(cur,true);
    emit('app:vis',{v:document.visibilityState==='visible'});
+   outboxFlush();if(call)resumeCall();
    if(!init1){init1=true;afterInit()}
    break;
   case 'chats':chats=d;renderList();if(cur){if(!chats.find(c=>c.id===cur)){closeChat()}else{renderHeader();renderAnnounce()}}break;
@@ -137,12 +172,14 @@ function onEv(ev,d){
    const k=d.chat+':'+d.user;clearTimeout(typers[k]);
    if(d.typing){typers[k]=setTimeout(()=>{delete typers[k];renderTyping()},4000);typers[k+'n']=d.name}else delete typers[k];
    renderTyping();break}
+  case 'pong':lastPong=Date.now();break;
   case 'call:state':
    if(d.call)callState[d.chat]=d.call;else{delete callState[d.chat];if(ringChat===d.chat)dismissRing()}
-   renderBanner();break;
+   renderBanner();renderList();break;
   case 'call:ring':ringModal(d.chat,d.from,d.video);break;
   case 'call:signal':onSignal(d);break;
   case 'call:left':if(call&&call.chat===d.chat)dropPeer(d.user);break;
+  case 'call:joined':if(call&&call.chat===d.chat&&call.peers[d.user])dropPeer(d.user);break;
   case 'pin':if(ar&&ar.chat===d.chat&&!ar.pins.find(x=>x.id===d.id))ar.pins.push(d);if(d.from!==me.id)toast('New AR note from '+((users[d.from]||{}).name||'someone'));break;
   case 'pin:removed':if(ar)ar.pins=ar.pins.filter(x=>x.id!==d.id);break;
   case 'schedule:done':toast(d.error?'Scheduled message failed: '+d.error:'Scheduled message sent');break;
@@ -157,8 +194,18 @@ function afterInit(){
  const join=q.get('join')||pendingJoin||store.get('mk_join');if(join){store.del('mk_join');pendingJoin=null;joinPrompt(join)}
  const chat=q.get('chat');
  if(chat&&chatById(chat)){openChat(chat,true);if(q.get('call')&&callState[chat]&&!call)ringModal(chat,callState[chat].users[0],callState[chat].video,true)}
- if(q.has('chat')||q.has('call')||q.has('join'))history.replaceState(null,'',location.pathname);
- if(pushSupported()&&Notification.permission==='default'&&!store.get('mk_alert_dismiss'))$('#alertBanner').classList.remove('hidden');
+ const act=q.get('action');if(act)setTimeout(()=>({newgroup:groupModal,search:()=>$('#search').focus(),calls:callsModal,invite:()=>inviteModal()})[act]&&({newgroup:groupModal,search:()=>$('#search').focus(),calls:callsModal,invite:()=>inviteModal()})[act](),400);
+ if(q.get('share'))shareModal();
+ if(q.has('chat')||q.has('call')||q.has('join')||q.has('action')||q.has('share'))history.replaceState(null,'',location.pathname);
+ alertBanner();callRecover();
+}
+function alertBanner(){
+ const b=$('#alertBanner'),t=b.querySelector('span');
+ let show=false;
+ if(isIOS&&!standalone){show=true;t.textContent='To get call and message alerts on iPhone, add MK Messages to your Home Screen (Share, then Add to Home Screen), then turn alerts on.';$('#alertOn').classList.add('hidden')}
+ else if(pushSupported()&&Notification.permission!=='granted'){show=Notification.permission==='default'||Notification.permission==='denied';t.textContent=Notification.permission==='denied'?'Alerts are blocked, so calls will not ring when MK Messages is closed. Allow notifications for this site in your browser settings.':'Calls will not ring when MK Messages is closed until you turn on alerts.';$('#alertOn').classList.toggle('hidden',Notification.permission==='denied')}
+ try{if(sessionStorage.getItem('mk_alert_x'))show=false}catch{}
+ b.classList.toggle('hidden',!show);
 }
 
 // ---------- helpers ----------
@@ -188,7 +235,7 @@ function renderList(){
  const list=chats.filter(c=>!ql||title(c).toLowerCase().includes(ql)).sort((a,b)=>(b.pinned-a.pinned)||((b.last?b.last.ts:0)-(a.last?a.last.ts:0)));
  let h=list.map(c=>{
   const av=chatAv(c),dr=c.id!==cur&&draftOf(c.id);
-  return `<div class="ci ${c.id===cur?'sel':''}" data-id="${esc(c.id)}">${av}<div class="mid"><div class="nm"><span style="overflow:hidden;text-overflow:ellipsis">${esc(title(c))}</span>${c.pinned?ic('pinned',14):''}${c.muted?ic('muted',14):''}</div><div class="lm">${dr?'<span style="color:var(--danger)">Draft: </span>'+esc(dr.slice(0,60)):esc(preview(c.last))}</div></div><div class="rt">${c.last?fmtDay(c.last.ts):''}${c.unread?`<br><span class="badge">${c.unread}</span>`:''}</div></div>`}).join('');
+  return `<div class="ci ${c.id===cur?'sel':''}" data-id="${esc(c.id)}">${av}<div class="mid"><div class="nm"><span style="overflow:hidden;text-overflow:ellipsis">${esc(title(c))}</span>${callState[c.id]?'<span style="color:var(--ok)">'+ic('phone',14)+'</span>':''}${c.pinned?ic('pinned',14):''}${c.muted?ic('muted',14):''}</div><div class="lm">${dr?'<span style="color:var(--danger)">Draft: </span>'+esc(dr.slice(0,60)):esc(preview(c.last))}</div></div><div class="rt">${c.last?fmtDay(c.last.ts):''}${c.unread?`<br><span class="badge">${c.unread}</span>`:''}</div></div>`}).join('');
  if(q){
   const inList=new Set(list.filter(c=>c.type==='dm').flatMap(c=>c.members)),people=found.filter(u=>!inList.has(u.id));
   if(/^\d{6}$/.test(q))h+=`<div class="sect">Group code</div><div class="ci" data-join="${esc(q)}"><div class="av">${ic('users',20)}</div><div class="mid"><div class="nm">Join group with code ${esc(q)}</div></div></div>`;
@@ -228,6 +275,7 @@ function renderAnnounce(){
 function openChat(id,keep){
  cur=id;reply=null;msgFilter='';$('#msgSearch').value='';$('#msgSearchBar').classList.add('hidden');mentionSel={};hideMent();
  $('#app').classList.add('chat');$('#placeholder').classList.add('hidden');$('#chatpane').classList.remove('hidden');
+ if(matchMedia('(max-width:760px)').matches)navPush('chat',()=>closeChat(true));
  inp.value=draftOf(id);autosize();syncSendMic();
  renderHeader();renderReply();renderList();closePanel();renderBanner();renderAnnounce();
  if(!msgs[id]){const cached=cacheMsgs(id);if(cached){msgs[id]=cached;}}
@@ -256,8 +304,8 @@ function updateBadge(){
  document.title=(n?'('+n+') ':'')+'MK Messages';
  try{if(navigator.setAppBadge){n?navigator.setAppBadge(n):navigator.clearAppBadge()}}catch{}
 }
-function closeChat(){cur=null;closePanel();renderBanner();$('#app').classList.remove('chat');$('#chatpane').classList.add('hidden');$('#placeholder').classList.remove('hidden');renderList()}
-$('#btnBack').onclick=closeChat;
+function closeChat(fromNav){if(!fromNav)navDone('chat');cur=null;closePanel();renderBanner();$('#app').classList.remove('chat');$('#chatpane').classList.add('hidden');$('#placeholder').classList.remove('hidden');renderList()}
+$('#btnBack').onclick=()=>closeChat();
 function renderHeader(){
  const c=chatById(cur);if(!c)return;
  const av=chatAv(c);
@@ -353,10 +401,11 @@ function lbShow(){
 function lbOpen(url){
  lbList=(msgs[cur]||[]).filter(m=>m.file&&/^image\//.test(m.file.type)&&m.file.url&&!m.deleted&&!m.once).map(m=>U(m.file.url));
  lbI=Math.max(0,lbList.indexOf(url));if(!lbList.length)lbList=[url];
- $('#lb').classList.remove('hidden');lbShow();
+ lbReveal();lbShow();
 }
-function lbClose(){$('#lb').classList.add('hidden');$('#lbBody').innerHTML=''}
-$('#lbX').onclick=lbClose;$('#lbPrev').onclick=()=>{if(lbI>0){lbI--;lbShow()}};$('#lbNext').onclick=()=>{if(lbI<lbList.length-1){lbI++;lbShow()}};
+function lbReveal(){$('#lb').classList.remove('hidden');navPush('lb',()=>lbClose(true))}
+function lbClose(fromNav){if(fromNav!==true)navDone('lb');$('#lb').classList.add('hidden');$('#lbBody').innerHTML=''}
+$('#lbX').onclick=()=>lbClose();$('#lbPrev').onclick=()=>{if(lbI>0){lbI--;lbShow()}};$('#lbNext').onclick=()=>{if(lbI<lbList.length-1){lbI++;lbShow()}};
 $('#lb').addEventListener('click',e=>{if(e.target.id==='lb'||e.target.id==='lbBody')lbClose()});
 document.addEventListener('keydown',e=>{if($('#lb').classList.contains('hidden'))return;if(e.key==='Escape')lbClose();if(e.key==='ArrowLeft'&&lbI>0){lbI--;lbShow()}if(e.key==='ArrowRight'&&lbI<lbList.length-1){lbI++;lbShow()}});
 // view-once: open full screen, can only be done once
@@ -367,7 +416,7 @@ function viewOnce(mid){
   const vid=/^video\//.test(d.type||'');
   $('#lbBody').innerHTML=vid?`<video src="${esc(U(d.url))}" controls autoplay playsinline></video>`:`<img src="${esc(U(d.url))}" alt="">`;
   $('#lbCap').textContent='View once · closes for good when you leave';$('#lbDl').removeAttribute('href');$('#lbPrev').style.display='none';$('#lbNext').style.display='none';
-  $('#lb').classList.remove('hidden');
+  lbReveal();
  });
 }
 $('#msgs').addEventListener('click',e=>{
