@@ -3004,30 +3004,73 @@ function openAdminList(){
  card.animate([{transform:'translate(-50%,-40%) scale(.8)',opacity:0},{transform:'translate(-50%,-50%) scale(1)',opacity:1}],{duration:220,easing:'ease-out',fill:'forwards'});
  const fold=()=>{
   card.onclick=null;document.removeEventListener('pointerdown',away,true);
-  const tgt=$('#hInfo').getBoundingClientRect(),r=card.getBoundingClientRect();
-  const tx=tgt.left+22-(r.left+r.width/2),ty=tgt.top+tgt.height/2-(r.top+r.height/2);
-  const rect='polygon(0% 0%,50% 0%,100% 0%,100% 50%,100% 100%,50% 100%,0% 100%,0% 50%)';
-  const crease='polygon(0% 40%,35% 30%,50% 0%,62% 28%,100% 10%,78% 60%,90% 100%,45% 78%)';
-  const bird='polygon(0% 40%,35% 30%,50% 0%,62% 28%,100% 10%,78% 60%,90% 100%,45% 78%)';
-  card.querySelector('.adminIn').animate([{opacity:1},{opacity:0}],{duration:350,fill:'forwards'});
-  card.animate([
-   {clipPath:rect,transform:'translate(-50%,-50%) rotateX(0) rotateY(0) scale(1)',background:'var(--panel)'},
-   {clipPath:crease,transform:'translate(-50%,-50%) rotateX(35deg) rotateY(-25deg) scale(.7)',background:'var(--accent2)',offset:.35},
-   {clipPath:bird,transform:'translate(-50%,-50%) rotateX(0) rotateY(0) scale(.35)',background:'var(--accent)',offset:.6}
-  ],{duration:900,easing:'ease-in-out',fill:'forwards'}).onfinish=()=>{
-   card.animate([
-    {clipPath:bird,transform:'translate(-50%,-50%) scale(.35) rotate(0)',offset:0},
-    {clipPath:bird,transform:`translate(calc(-50% + ${tx*.5}px),calc(-50% + ${ty*.5-120}px)) scale(.3) rotate(-12deg)`,offset:.55},
-    {clipPath:bird,transform:`translate(calc(-50% + ${tx}px),calc(-50% + ${ty}px)) scale(.12) rotate(6deg)`,offset:1}
-   ],{duration:900,easing:'cubic-bezier(.4,0,.2,1)',fill:'forwards'}).onfinish=()=>{
-    card.remove();birdPerched[c.id]=true;renderLock(c);
-    $('#adminBird').animate([{transform:'translateY(-8px) scale(.6)'},{transform:'translateY(0) scale(1.15)'},{transform:'scale(1)'}],{duration:350});
-   };
-  };
+  const r=card.getBoundingClientRect(),tg=$('#hInfo').getBoundingClientRect();
+  card.querySelector('.adminIn').animate([{opacity:1},{opacity:0}],{duration:250,fill:'forwards'});
+  card.animate([{opacity:1},{opacity:0}],{duration:300,delay:150,fill:'forwards'});
+  origamiCrane(r.left+r.width/2,r.top+r.height/2,tg.left+22,tg.top+tg.height/2,()=>{
+   card.remove();birdPerched[c.id]=true;renderLock(c);
+   $('#adminBird').animate([{transform:'translateY(-8px) scale(.6)'},{transform:'translateY(0) scale(1.15)'},{transform:'scale(1)'}],{duration:350});
+  });
  };
  const away=e=>{if(!card.contains(e.target))fold()};
  setTimeout(()=>document.addEventListener('pointerdown',away,true),50);
  card.onclick=fold;
+}
+// Paper folds like a real crane: every facet is a triangle; fold steps reflect facets across their creases
+// (vertices slide across the crease in projection, the facet turns to its paper back), then the crane flaps away.
+function origamiCrane(cx,cy,tx,ty,done){
+ const NS='http://www.w3.org/2000/svg',T=[0,-50],R=[50,0],B=[0,50],L=[-50,0],Cl=[-29.29,-20.71],Cr=[29.29,-20.71],Cm=[0,-20.71];
+ const rf=(p,a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1],t=((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy),fx=a[0]+t*dx,fy=a[1]+t*dy;return[2*fx-p[0],2*fy-p[1]]};
+ const S0=[[B,L,Cl],[B,R,Cr],[T,Cl,Cm],[T,Cr,Cm],[Cl,B,Cm],[Cr,B,Cm]];
+ const S1=S0.map((f,i)=>i===0?f.map(p=>rf(p,B,Cl)):i===1?f.map(p=>rf(p,B,Cr)):f);
+ const S2=S1.map((f,i)=>i===2||i===3?f.map(p=>rf(p,Cl,Cr)):f);
+ const S3=[[[-6,-2],[-26,-36],[10,-6]],[[2,-4],[20,-40],[16,-2]],[[-16,4],[14,-8],[4,18]],[[4,18],[14,-8],[24,6]],[[14,-8],[38,-34],[22,-2]],[[-16,4],[-44,16],[-4,14]]];
+ const FLAP=[[[-6,-2],[-30,10],[10,-6]],[[2,-4],[34,4],[16,-2]]];
+ const front=[59,130,246],back=[207,224,255],crane=[[156,194,255],[100,160,255],[47,111,224],[74,141,245],[91,154,255],[43,99,201]];
+ const flipAt=[null,[0,1],[2,3]];
+ const mix=(a,b,u)=>a.map((v,i)=>v+(b[i]-v)*u),rgb=c=>`rgb(${c.map(Math.round)})`;
+ const lerpF=(A,B2,u)=>A.map((f,i)=>f.map((p,j)=>[p[0]+(B2[i][j][0]-p[0])*u,p[1]+(B2[i][j][1]-p[1])*u]));
+ const ease=u=>u<.5?2*u*u:1-Math.pow(-2*u+2,2)/2;
+ const svg=document.createElementNS(NS,'svg');
+ svg.setAttribute('viewBox','-60 -60 120 120');svg.setAttribute('width',240);svg.setAttribute('height',240);
+ svg.style.cssText=`position:fixed;left:${cx-120}px;top:${cy-120}px;z-index:61;pointer-events:none;overflow:visible;filter:drop-shadow(0 6px 8px rgba(0,0,0,.35))`;
+ const polys=S0.map(()=>{const e=document.createElementNS(NS,'polygon');e.setAttribute('stroke','rgba(255,255,255,.7)');e.setAttribute('stroke-width','.5');e.setAttribute('stroke-linejoin','round');return e});[2,3,4,5,0,1].forEach(i=>svg.appendChild(polys[i]));
+ document.body.appendChild(svg);
+ const colorOf=(i,step,u)=>{ // step 0: S0->S1, 1: S1->S2, 2: S2->S3
+  const flipped=(st)=>(st>=1&&i<2)||(st>=2&&(i===2||i===3));
+  let base;
+  if(step<2){const f0=flipped(step),turning=flipAt[step+1]&&flipAt[step+1].includes(i),f=turning?u>=.5:f0;base=f||f0?back:front;if(turning)base=mix(base,[0,0,0],.3*Math.sin(Math.PI*u))}
+  else base=mix(flipped(2)?back:front,crane[i],u);
+  return base;
+ };
+ const draw=(fs,step,u)=>fs.forEach((f,i)=>{polys[i].setAttribute('points',f.map(p=>p.join(',')).join(' '));polys[i].setAttribute('fill',rgb(colorOf(i,step,u)))});
+ const steps=[[S0,S1,850],[S1,S1,200],[S1,S2,850],[S2,S2,200],[S2,S3,1000]],stepIdx=[0,0,1,1,2];
+ const flyMs=1700,sx=tx<cx?-1:1,mid=[(cx+tx)/2,Math.min(cy,ty)-160];
+ let seg=0,t0=performance.now();
+ const unfoldAll=steps.reduce((a,x)=>a+x[2],0);
+ const tick=now=>{
+  let el=now-t0;
+  if(el<unfoldAll){
+   let k=0;while(el>steps[k][2]){el-=steps[k][2];k++}
+   const u=ease(el/steps[k][2]);
+   draw(lerpF(steps[k][0],steps[k][1],u),stepIdx[k],u);
+   svg.style.transform=`scale(${1+.08*Math.sin(Math.PI*u)*(k%2?0:1)})`;
+   return requestAnimationFrame(tick);
+  }
+  const fe=now-t0-unfoldAll;
+  if(fe<flyMs){
+   const u=ease(fe/flyMs),m=1-u;
+   const x=m*m*cx+2*m*u*mid[0]+u*u*tx,y=m*m*cy+2*m*u*mid[1]+u*u*ty;
+   const dx=2*m*(mid[0]-cx)+2*u*(tx-mid[0]),dy=2*m*(mid[1]-cy)+2*u*(ty-mid[1]);
+   const w=(1+Math.sin(fe/70))/2;
+   draw(S3.map((f,i)=>i<2?f.map((p,j)=>[p[0]+(FLAP[i][j][0]-p[0])*w,p[1]+(FLAP[i][j][1]-p[1])*w]):f),2,1);
+   const bank=Math.max(-25,Math.min(25,Math.atan2(dy,dx*sx)*57.3*.35*sx));
+   svg.style.transform=`translate(${x-cx}px,${y-cy}px) scale(${sx*(.75-.58*u)},${.75-.58*u}) rotate(${sx*bank}deg)`;
+   return requestAnimationFrame(tick);
+  }
+  svg.remove();done();
+ };
+ requestAnimationFrame(tick);
 }
 $('#adminsLink').onclick=openAdminList;
 $('#adminsLink').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openAdminList()}};
