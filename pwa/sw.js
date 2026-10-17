@@ -1,7 +1,7 @@
 // MK Messages service worker: caches the app shell; shows call / message / invitation
 // alerts from Web Push (calls re-alert like a ringer); handles notification actions
 // (reply, mark read, answer, hang up); receives files and text shared from other apps.
-const CACHE = 'mk-shell-v6';
+const CACHE = 'mk-shell-v7';
 const SHELL = ['/', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 const RING_TIMES = 12, RING_EVERY = 3000; // about 35 seconds of ringing
 

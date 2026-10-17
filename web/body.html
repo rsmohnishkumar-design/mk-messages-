@@ -21,8 +21,12 @@
    <button class="ib" id="btnSideMore" data-i="more" aria-label="Menu"></button>
   </div>
   <div id="alertBanner" class="hidden"><span>Turn on alerts so calls ring and messages arrive even when MK Messages is closed.</span><button class="btn" id="alertOn" style="padding:6px 12px">Turn on</button><button class="ib" id="alertX" data-i="x" data-s="16" aria-label="Dismiss"></button></div>
+  <div id="tabs"><button data-tab="chats" class="on">Chats</button><button data-tab="status">Status<span id="stDot" class="hidden"></span></button></div>
   <input type="text" id="search" placeholder="Search chats, or find people by number or username">
   <div id="chatlist"></div>
+  <div id="statuslist" class="hidden"></div>
+  <button class="fab hidden" id="stFab" data-i="plus" data-s="26" aria-label="Add status"></button>
+  <input type="file" id="stFile" class="hidden">
  </div>
  <div id="main">
   <div id="placeholder"><h2>MK Messages</h2><p>Select a chat, or open the menu to create or join a group.</p></div>
@@ -82,6 +86,11 @@
  <video id="arVid" autoplay playsinline muted></video><div id="arLayer"></div><div id="arCross"></div>
  <div id="arTop"><button class="ib" id="arClose" data-i="x" aria-label="Close"></button><div class="grow"><b id="arTitle"></b><div id="arStat" style="font-size:12px;opacity:.85"></div></div></div>
  <div id="arBot"><button class="btn" id="arPlace">Pin a note</button><button class="btn sec" id="arList" style="background:#fff">Notes</button></div>
+</div>
+<div id="sv" class="hidden">
+ <div id="svBars"></div>
+ <div class="svtop"><div id="svWho"></div><span style="flex:1"></span><button class="btn sec hidden" id="svViews" style="color:#fff;border-color:#fff6;padding:6px 12px"></button><button class="ib hidden" id="svDel" data-i="trash" aria-label="Delete" style="color:#fff"></button><button class="ib" id="svX" data-i="x" aria-label="Close" style="color:#fff"></button></div>
+ <div id="svBody"></div>
 </div>
 <div id="lb" class="hidden">
  <div class="lbtop"><span id="lbCap"></span><span style="flex:1"></span><a id="lbDl" class="ib" download aria-label="Download" data-i="download" style="color:#fff"></a><button class="ib" id="lbX" data-i="x" aria-label="Close" style="color:#fff"></button></div>

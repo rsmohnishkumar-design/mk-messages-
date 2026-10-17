@@ -153,7 +153,7 @@ function onEv(ev,d){
    me=d.me;chats=d.chats;d.users.forEach(u=>users[u.id]=u);users[me.id]=me;
    renderMe();renderList();if(cur&&chats.find(c=>c.id===cur))openChat(cur,true);
    emit('app:vis',{v:document.visibilityState==='visible'});
-   outboxFlush();if(call)resumeCall();
+   outboxFlush();if(call)resumeCall();stLoad();
    if(!init1){init1=true;afterInit()}
    break;
   case 'chats':chats=d;renderList();if(cur){if(!chats.find(c=>c.id===cur)){closeChat()}else{renderHeader();renderAnnounce()}}break;
@@ -173,6 +173,8 @@ function onEv(ev,d){
    if(d.typing){typers[k]=setTimeout(()=>{delete typers[k];renderTyping()},4000);typers[k+'n']=d.name}else delete typers[k];
    renderTyping();break}
   case 'pong':lastPong=Date.now();break;
+  case 'status:new':stLoad();break;
+  case 'status:viewed':{for(const g of stData.groups)for(const i of g.items)if(i.id===d.id){i.views=(i.views||[]).concat({user:d.user,ts:d.ts})}if(sv&&stCur()&&stCur().user===me.id)stShow();break}
   case 'call:state':
    if(d.call)callState[d.chat]=d.call;else{delete callState[d.chat];if(ringChat===d.chat)dismissRing()}
    renderBanner();renderList();break;

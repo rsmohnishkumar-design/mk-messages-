@@ -76,7 +76,7 @@ export class Hub {
     this.ctx = ctx;
     this.env = env;
     this.users = {}; this.groups = {}; this.sessions = {}; this.messages = {};
-    this.sched = {}; this.pins = {}; this.calls = {}; this.invites = {}; this.reports = {};
+    this.statuses = {}; this.sched = {}; this.pins = {}; this.calls = {}; this.invites = {}; this.reports = {};
     this.nextExp = Infinity; this.nextBackup = 0; this.iceCache = null;
     this.socks = new Map(); // WebSocket -> uid
     this.vis = new Map();   // WebSocket -> page visible?
@@ -89,7 +89,7 @@ export class Hub {
         for (const [k, v] of await s.list({ prefix })) { target[k.slice(prefix.length)] = v; this.cache.set(k, JSON.stringify(v)); }
       };
       await load('u:', this.users); await load('g:', this.groups); await load('s:', this.sessions);
-      await load('sc:', this.sched); await load('iv:', this.invites); await load('rp:', this.reports);
+      await load('st:', this.statuses); await load('sc:', this.sched); await load('iv:', this.invites); await load('rp:', this.reports);
       for (const [k, v] of await s.list({ prefix: 'p:' })) this.pins[k.slice(2)] = v;
       const segs = {};
       for (const [k, v] of await s.list({ prefix: 'm:' })) {
@@ -144,7 +144,7 @@ export class Hub {
   }
   save(...chatIds) {
     this.persist('u:', this.users); this.persist('g:', this.groups); this.persist('s:', this.sessions);
-    this.persist('sc:', this.sched); this.persist('iv:', this.invites); this.persist('rp:', this.reports);
+    this.persist('st:', this.statuses); this.persist('sc:', this.sched); this.persist('iv:', this.invites); this.persist('rp:', this.reports);
     chatIds.forEach((c) => this.saveChat(c));
   }
   async getVapid() {
@@ -372,6 +372,7 @@ export class Hub {
   fileInUse(url) {
     for (const list of Object.values(this.messages)) for (const m of list) if (!m.deleted && m.file && m.file.url === url) return true;
     for (const list of Object.values(this.pins)) for (const p of list) if (p.photo === url) return true;
+    for (const st of Object.values(this.statuses)) if (st.file && st.file.url === url) return true;
     for (const u of Object.values(this.users)) if ((u.stickers || []).some((x) => x.url === url)) return true;
     return false;
   }
@@ -462,6 +463,23 @@ export class Hub {
 
   // ---- alarm: scheduled messages, disappearing messages, daily backup ----
   nextBackupTime() { const d = new Date(); d.setUTCHours(3, 30, 0, 0); if (d.getTime() <= Date.now()) d.setUTCDate(d.getUTCDate() + 1); return d.getTime(); }
+  purgeStatuses() {
+    const now = Date.now();
+    for (const [id, st] of Object.entries(this.statuses)) if (st.exp <= now) { delete this.statuses[id]; this.purgeFile(st.file); }
+    this.save();
+  }
+  statusView(viewer) {
+    const seeIds = new Set(this.allMemberIds(viewer)), by = {}, now = Date.now();
+    for (const st of Object.values(this.statuses)) {
+      if (st.exp <= now || !seeIds.has(st.uid)) continue;
+      const o = this.users[st.uid]; if (!o || (st.uid !== viewer && (o.blocked || []).includes(viewer))) continue;
+      const it = { id: st.id, kind: st.kind, text: st.text, bg: st.bg, file: st.file, ts: st.ts, viewed: st.uid === viewer || !!st.views[viewer] };
+      if (st.uid === viewer) it.views = Object.entries(st.views).map(([u, t]) => ({ user: u, ts: t }));
+      (by[st.uid] = by[st.uid] || []).push(it);
+    }
+    const out = Object.entries(by).map(([u, items]) => ({ user: u, items: items.sort((a, b) => a.ts - b.ts) }));
+    return { groups: out, users: this.pubUsers(out.map((g) => g.user), viewer) };
+  }
   scanExp() { let t = Infinity; for (const list of Object.values(this.messages)) for (const m of list) if (m.exp && m.exp < t) t = m.exp; this.nextExp = t; }
   purgeExpired() {
     const now = Date.now();
@@ -487,7 +505,7 @@ export class Hub {
     return name;
   }
   armAlarm() {
-    const ts = [...Object.values(this.sched).map((i) => i.at), this.nextExp, this.nextBackup].filter(Number.isFinite);
+    const ts = [...Object.values(this.sched).map((i) => i.at), ...Object.values(this.statuses).map((x) => x.exp), this.nextExp, this.nextBackup].filter(Number.isFinite);
     if (ts.length) this.ctx.storage.setAlarm(Math.max(Math.min(...ts), Date.now() + 1000));
   }
   async alarm() {
@@ -499,6 +517,7 @@ export class Hub {
       this.toUser(it.from, 'schedule:done', { id: it.id, error: r.error || null });
     }
     if (this.nextExp <= now) this.purgeExpired();
+    this.purgeStatuses();
     if (this.nextBackup <= now) {
       try { await this.takeSnapshot(); } catch (e) { console.error('backup failed', e); }
       this.nextBackup = this.nextBackupTime();
@@ -1161,6 +1180,32 @@ export class Hub {
       },
       'push:status'({ me }, _d, cb) {
         cb({ devices: (me.push || []).map((x) => ({ host: new URL(x.endpoint).host, since: x.ts, last: x.last || null })) });
+      },
+      'status:list'({ uid }, _d, cb) { this.purgeStatuses(); cb(this.statusView(uid)); },
+      'status:post'({ uid }, d, cb) {
+        const mine = Object.values(this.statuses).filter((x) => x.uid === uid);
+        if (mine.length >= 30) return cb({ error: 'You have 30 active statuses. Delete one first.' });
+        const kind = d.kind === 'media' ? 'media' : 'text';
+        let file = null;
+        if (kind === 'media') { file = cleanFile(d.file); if (!file || !/^(image|video)\//.test(file.type)) return cb({ error: 'Choose a photo or video' }); }
+        const text = String(d.text || '').slice(0, kind === 'text' ? 700 : 200).trim();
+        if (kind === 'text' && !text) return cb({ error: 'Write something first' });
+        const id = rand(8), now = Date.now();
+        this.statuses[id] = { id, uid, kind, text, bg: /^#[0-9a-f]{6}$/i.test(d.bg || '') ? d.bg : '#1e66d0', file, ts: now, exp: now + 24 * 3600 * 1000, views: {} };
+        this.save(); this.armAlarm();
+        this.allMemberIds(uid).forEach((m) => { if (m !== uid) this.toUser(m, 'status:new', { user: uid }); });
+        cb({ ok: true, id });
+      },
+      'status:view'({ uid }, { id }) {
+        const st = this.statuses[id]; if (!st || st.uid === uid || st.views[uid] || !this.allMemberIds(uid).includes(st.uid)) return;
+        st.views[uid] = Date.now(); this.save();
+        this.toUser(st.uid, 'status:viewed', { id, user: uid, ts: st.views[uid] });
+      },
+      'status:delete'({ uid }, { id }, cb) {
+        const st = this.statuses[id]; if (!st || st.uid !== uid) return cb && cb({ error: 'Not found' });
+        delete this.statuses[id]; this.purgeFile(st.file); this.save();
+        this.allMemberIds(uid).forEach((m) => this.toUser(m, 'status:new', { user: uid }));
+        cb && cb({ ok: true });
       },
       'users:match'({ uid }, { phones }, cb) {
         const out = [], seen = new Set();
